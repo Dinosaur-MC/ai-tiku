@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Tiku - 智能题库答题系统</title>
+
+    <!-- MDUI CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mdui@2/mdui.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" />
+    <script src="https://cdn.jsdelivr.net/npm/mdui@2/mdui.global.js"></script>
+
+    <style>
+        body {
+            background-color: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+            padding: 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+
+        .header p {
+            margin: 16px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .search-card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            height: 100%;
+        }
+
+        .output-area {
+            min-height: 350px;
+            max-height: 600px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 16px;
+            border: 1px solid #e0e0e0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .output-area pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+        }
+
+        .fullscreen-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .fullscreen-content {
+            width: 90%;
+            height: 90%;
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .fullscreen-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .fullscreen-body {
+            flex: 1;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .fullscreen-body pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .close-btn {
+            cursor: pointer;
+            font-size: 28px;
+            color: #666;
+            transition: color 0.3s;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 24px;
+        }
+
+        .error-message {
+            color: #f44336;
+            padding: 16px;
+            background-color: #ffebee;
+            border-radius: 8px;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .success-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background-color: #4caf50;
+            color: white;
+            border-radius: 16px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        .error-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background-color: #f44336;
+            color: white;
+            border-radius: 16px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1200px) {
+            .container {
+                padding: 16px;
+            }
+
+            .search-card,
+            .result-card {
+                padding: 24px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+
+            .header p {
+                font-size: 1em;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>📚 AI-Tiku 智能题库</h1>
+            <p>基于人工智能的题库答题服务系统</p>
+        </div>
+
+        <div style="display: flex; gap: 20px;">
+
+            <!-- 查询表单 -->
+            <mdui-card class="search-card">
+                <div style="margin-bottom: 20px;">
+                    <mdui-text-field label="Token" variant="outlined" id="tokenInput" placeholder="请输入您的 Token"
+                        value="test123456"></mdui-text-field>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <mdui-text-field label="题目内容" variant="outlined" id="questionInput" placeholder="请输入题目内容"
+                        rows="3"></mdui-text-field>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <mdui-select label="题目类型" variant="outlined" id="typeSelect" value="unknown">
+                        <mdui-menu-item value="unknown">未知题型</mdui-menu-item>
+                        <mdui-menu-item value="single">单选题</mdui-menu-item>
+                        <mdui-menu-item value="multiple">多选题</mdui-menu-item>
+                        <mdui-menu-item value="judgement">判断题</mdui-menu-item>
+                        <mdui-menu-item value="completion">填空题</mdui-menu-item>
+                        <mdui-menu-item value="essay">简答题</mdui-menu-item>
+                    </mdui-select>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <mdui-text-field label="选项内容（可选，多个选项用换行分隔）" variant="outlined" id="optionsInput"
+                        placeholder="选项 A&#10;选项 B&#10;选项 C&#10;选项 D" rows="4"></mdui-text-field>
+                </div>
+
+                <div style="display: flex; margin-bottom: 20px; align-items: center;">
+                    <span style="margin-right: 8px; flex: 1;">强制使用 AI 搜索</span>
+                    <mdui-switch id="switchForceAi" value="off"></mdui-switch>
+                </div>
+
+                <div style="display: flex; gap: 12px;">
+                    <mdui-button icon="search--outlined" onclick="searchAnswer()" style="flex: 1;">
+                        搜索答案
+                    </mdui-button>
+
+                    <mdui-button icon="info--outlined" variant="tonal" onclick="getInfo()">
+                        查询配额
+                    </mdui-button>
+                </div>
+            </mdui-card>
+
+            <div style="flex: 1; margin-bottom: 24px;">
+                <!-- 加载指示器 -->
+                <div class="loading" id="loadingIndicator">
+                    <mdui-circular-progress></mdui-circular-progress>
+                    <p style="margin-top: 16px; color: #666;">正在搜索答案，请稍候...</p>
+                </div>
+
+                <!-- 错误信息 -->
+                <div class="error-message" id="errorMessage"></div>
+
+                <!-- 结果展示 -->
+                <mdui-card class="result-card" id="resultCard" style="display: none;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2 style="margin: 0;">搜索结果</h2>
+                        <div>
+                            <span id="resultBadge"></span>
+                        </div>
+                    </div>
+
+                    <div class="output-area" id="outputArea">
+                        <pre id="outputContent"></pre>
+                    </div>
+
+                    <div style="margin-top: 16px; display: flex; gap: 12px;">
+                        <mdui-button icon="fullscreen--outlined" variant="tonal" onclick="openFullscreen()">
+                            全屏查看
+                        </mdui-button>
+
+                        <mdui-button icon="content_copy--outlined" variant="tonal" onclick="copyResult()">
+                            复制结果
+                        </mdui-button>
+                    </div>
+                </mdui-card>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全屏弹窗 -->
+    <div class="fullscreen-overlay" id="fullscreenOverlay" onclick="closeFullscreen(event)">
+        <div class="fullscreen-content" onclick="event.stopPropagation()">
+            <div class="fullscreen-header">
+                <h2 style="margin: 0;">搜索结果详情</h2>
+                <span class="close-btn" onclick="closeFullscreen()">&times;</span>
+            </div>
+            <div class="fullscreen-body">
+                <pre id="fullscreenContent"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentResult = null;
+
+        // 搜索答案
+        async function searchAnswer() {
+            const token = document.getElementById('tokenInput').value.trim();
+            const question = document.getElementById('questionInput').value.trim();
+            const type = document.getElementById('typeSelect').value;
+            const options = document.getElementById('optionsInput').value.trim();
+            const force_ai = document.getElementById('switchForceAi').checked;
+
+            if (!token) {
+                showError('请输入 Token');
+                return;
+            }
+
+            if (!question) {
+                showError('请输入题目内容');
+                return;
+            }
+
+            // 显示加载指示器
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('resultCard').style.display = 'none';
+            hideError();
+
+            try {
+                // 构建查询参数
+                const params = new URLSearchParams({
+                    token: token,
+                    question: question,
+                    type: type,
+                    force_ai: force_ai
+                });
+
+                if (options) {
+                    params.append('options', options);
+                }
+
+                const response = await fetch(`/api/query?${params.toString()}`);
+                const data = await response.json();
+
+                currentResult = data;
+
+                // 隐藏加载指示器
+                document.getElementById('loadingIndicator').style.display = 'none';
+
+                // 显示结果
+                showResult(data);
+
+            } catch (error) {
+                document.getElementById('loadingIndicator').style.display = 'none';
+                showError(`请求失败：${error.message}`);
+            }
+        }
+
+        // 获取配额信息
+        async function getInfo() {
+            const token = document.getElementById('tokenInput').value.trim();
+
+            if (!token) {
+                showError('请输入 Token');
+                return;
+            }
+
+            document.getElementById('loadingIndicator').style.display = 'block';
+            document.getElementById('resultCard').style.display = 'none';
+            hideError();
+
+            try {
+                const response = await fetch(`/api/info?token=${encodeURIComponent(token)}`);
+                const data = await response.json();
+
+                currentResult = data;
+                document.getElementById('loadingIndicator').style.display = 'none';
+                showResult(data, true);
+
+            } catch (error) {
+                document.getElementById('loadingIndicator').style.display = 'none';
+                showError(`请求失败：${error.message}`);
+            }
+        }
+
+        // 显示结果
+        function showResult(data, isInfo = false) {
+            const resultCard = document.getElementById('resultCard');
+            const outputContent = document.getElementById('outputContent');
+            const fullscreenContent = document.getElementById('fullscreenContent');
+            const resultBadge = document.getElementById('resultBadge');
+
+            resultCard.style.display = 'block';
+
+            // 格式化 JSON 输出
+            const formattedJson = JSON.stringify(data, null, 2);
+            outputContent.textContent = formattedJson;
+            fullscreenContent.textContent = formattedJson;
+
+            // 设置徽章
+            if (data.code === 1) {
+                resultBadge.innerHTML = '<span class="success-badge">成功</span>';
+            } else {
+                resultBadge.innerHTML = '<span class="error-badge">失败</span>';
+            }
+        }
+
+        // 打开全屏
+        function openFullscreen() {
+            const overlay = document.getElementById('fullscreenOverlay');
+            const content = document.getElementById('fullscreenContent');
+            const outputContent = document.getElementById('outputContent');
+
+            content.textContent = outputContent.textContent;
+            overlay.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        // 关闭全屏
+        function closeFullscreen(event) {
+            if (!event || event.target === document.getElementById('fullscreenOverlay')) {
+                document.getElementById('fullscreenOverlay').style.display = 'none';
+                document.body.style.overflow = '';
+            }
+        }
+
+        // 复制结果
+        function copyResult() {
+            const outputContent = document.getElementById('outputContent');
+            navigator.clipboard.writeText(outputContent.textContent).then(() => {
+                mdui.snackbar({
+                    message: '已复制到剪贴板',
+                    timeout: 2000
+                });
+            }).catch(err => {
+                mdui.snackbar({
+                    message: `复制失败：${err}`,
+                    type: 'error'
+                });
+            });
+        }
+
+        // 显示错误
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // 隐藏错误
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        // 支持 ESC 键关闭全屏
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeFullscreen();
+            }
+        });
+    </script>
+</body>
+
+</html>

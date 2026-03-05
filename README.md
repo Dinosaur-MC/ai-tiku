@@ -1,347 +1,436 @@
 # AI-Tiku
 
-AI题库答题服务系统。
+AI 题库答题服务系统 - 基于 AI 的智能题库查询和答题解决方案。
 
-## Architecture
+## 📋 目录
 
-### Overview
+- [功能特性](#功能特性)
+- [系统架构](#系统架构)
+- [快速开始](#快速开始)
+- [API 文档](#api-文档)
+- [Web 界面](#web-界面)
+- [开发指南](#开发指南)
+- [配置说明](#配置说明)
 
-1. Database: SQLite/MySQL, FAISS
-2. Model Provider: Ollama, OpenAI-Compatible
-3. Agent Framework: LangChain, LangGraph
-4. Functions: Key function of the system
-5. Web API: FastAPI
-6. Web UI: HTML5, MDUI
+## ✨ 功能特性
 
-### Database
+### 核心功能
 
-#### SQL:
+- **🔍 智能查题** - 基于向量相似度搜索题目，支持多种题型
+- **🤖 AI 辅助答题** - 当题库中没有匹配答案时，使用 LLM 生成答案
+- **📊 配额管理** - Token 级别的调用次数统计和限制
+- **📝 题目分类** - 自动将题目分类到合适的知识类别
+- **✅ 答案复审** - 审核和修正 AI 生成的答案，确保准确性
+- **💬 RAG 对话** - 基于检索增强生成的对话式问答
 
-SQLite Path: `data/db.sqlite3`
+### 技术特性
 
-```sql
--- 用户凭证表
-CREATE TABLE `api_tokens` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `token` VARCHAR(64) NOT NULL COMMENT '用户唯一凭证',
-  `total_queries` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '总查询次数（题库使用次数）',
-  `success_queries` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '成功查询次数',
-  `remaining_queries` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '剩余查询次数',
-  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE INDEX `idx_token` (`token`)
-) COMMENT='用户凭证及配额表';
+- **多模型支持** - 支持 Ollama、OpenAI 等多种大模型后端
+- **向量检索** - 基于 FAISS 的高效向量相似度搜索
+- **流式输出** - 支持 SSE 流式响应，提升用户体验
+- **异步处理** - 完整的异步 IO 支持，高并发场景优化
+- **RESTful API** - 标准化的 REST API 接口
+- **响应式 UI** - 基于 MDUI 的现代化 Web 界面
 
--- 题库主表（题目-答案）
-CREATE TABLE `questions` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '题目ID',
-  `question_text` TEXT NOT NULL COMMENT '题目内容',
-  `answer_text` TEXT NOT NULL COMMENT '答案内容',
-  `is_ai_generated` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否AI生成（0：人工录入，1：AI生成）',
-  `source` VARCHAR(100) DEFAULT NULL COMMENT '题目来源（如：教材、题库等）',
-  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  FULLTEXT INDEX `idx_question_fulltext` (`question_text`) COMMENT '全文索引，用于快速搜索题目'
-) COMMENT='题目答案主表';
+## 🏗️ 系统架构
 
--- 查询日志表（用于统计和审计）
-CREATE TABLE `query_logs` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '日志ID',
-  `token_id` INT UNSIGNED NOT NULL COMMENT '关联的token ID',
-  `query_text` TEXT NOT NULL COMMENT '用户查询的原始题目',
-  `found` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否找到答案（0：未找到，1：找到）',
-  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '查询时间',
-  PRIMARY KEY (`id`),
-  INDEX `idx_token_id` (`token_id`),
-  INDEX `idx_created_at` (`created_at`),
-  CONSTRAINT `fk_query_logs_token` FOREIGN KEY (`token_id`) REFERENCES `api_tokens` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-) COMMENT='查询日志表';
-
-CREATE TABLE `categories` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `name` VARCHAR(50) NOT NULL,
-  `description` TEXT,
-  PRIMARY KEY (`id`)
-);
-
-CREATE TABLE `question_category` (
-  `question_id` INT UNSIGNED NOT NULL,
-  `category_id` INT UNSIGNED NOT NULL,
-  PRIMARY KEY (`question_id`, `category_id`),
-  FOREIGN KEY (`question_id`) REFERENCES `questions` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE
-);
+```
+┌─────────────────────────────────────────────┐
+│              Web UI (MDUI)                   │
+│         查询界面 | 结果展示 | 全屏查看        │
+└────────────────┬────────────────────────────┘
+                 │ HTTP/REST API
+┌────────────────▼────────────────────────────┐
+│              FastAPI Application             │
+│    ┌──────────┐  ┌──────────┐  ┌─────────┐ │
+│    │ /query   │  │ /info    │  │ /health │ │
+│    └──────────┘  └──────────┘  └─────────┘ │
+└────────────────┬────────────────────────────┘
+                 │
+    ┌────────────┼────────────┐
+    │            │            │
+┌───▼────┐  ┌───▼────┐  ┌───▼─────────┐
+│ Answer │  │ Agents │  │  Database   │
+│Retriever│  │ Layer  │  │   Manager   │
+│        │  │        │  │             │
+│• Search│  │• Class │  │ • SQLite    │
+│• AI Gen│  │• Review│  │ • FAISS     │
+│• Rank  │  │• RAG   │  │ • Vectors   │
+└────────┘  └────────┘  └─────────────┘
+                 │
+         ┌───────┴───────┐
+         │               │
+    ┌────▼────┐    ┌─────▼─────┐
+    │ Prompts │    │ LLM Layer │
+    │ Templates│    │           │
+    │         │    │• Embedding│
+    │• Class  │    │• Completion│
+    │• Query  │    │• Chat     │
+    │• Review │    │• Stream   │
+    └─────────┘    └───────────┘
 ```
 
-#### Vector Database: FAISS
+### 模块说明
 
-Vector Path: `data/embeddings/faiss_{category_id}.index`
+1. **Web UI 层** (`ui.py`)
+   - 基于 MDUI 组件库的现代化界面
+   - 支持全屏查看、结果复制
+   - 响应式设计，适配各种屏幕
 
-### Model Provider
+2. **API 层** (`api.py`)
+   - `/query` - 查题接口
+   - `/info` - 配额查询接口
+   - Token 验证和配额管理
 
-Interface:
+3. **Answer Retriever** (`answer_retriever.py`)
+   - 向量相似度搜索
+   - AI 答案生成
+   - 结果排序和过滤
 
-- embeddings
-    - embedding
-    - retrieval
-- completion/chat
-    - streaming
-    - async
-    - normal
+4. **Agents 层** (`agents/`)
+   - `classification.py` - 题目分类 Agent
+   - `reviewer.py` - 答案复审 Agent
+   - `rag_chat.py` - RAG 对话 Agent
 
-### Agent Framework
+5. **Database 层** (`db.py`)
+   - SQLite 关系型数据库
+   - FAISS 向量数据库
+   - 数据持久化管理
 
-- LangChain
-- LangGraph
+6. **LLM 层** (`llm.py`)
+   - 统一的模型调用接口
+   - 支持流式和异步操作
+   - 多模型后端适配
 
-### Functions
+7. **Prompts 层** (`prompts/`)
+   - 分类提示词模板
+   - 查询提示词模板
+   - 复审提示词模板
 
-- Answer retriever: Search for answers normally based on the question content.
-- Answer reviewer: Review and correct history answers by given corrections.
-- Classification: Classify questions into different categories.
-- RAG based chat: Chat with the question and answer.
+## 🚀 快速开始
 
-## API Document
+### 环境要求
 
-```yaml
-openapi: 3.0.3
-info:
-    title: 题库 API
-    description: |
-        题库开发者接口文档，提供查题及题库信息查询功能。
+- Python 3.12+
+- Ollama（用于运行本地 LLM）
+- uv 或 pip（包管理工具）
 
-        **注意**：调用前请先在[题库个人中心](https://tk.enncy.cn)获取`token`。
-    version: 1.0.0
-    contact:
-        name: 题库支持
-        url: https://tk.enncy.cn
-servers:
-    - url: https://tk.enncy.cn
-      description: 生产服务器
+### 1. 安装依赖
 
-paths:
-    /query:
-        get:
-            summary: 查题接口
-            description: |
-                根据题目内容搜索答案。支持单题查询和多结果查询（通过`more`参数控制）。
+```bash
+# 使用 uv（推荐）
+uv install
 
-                **参数说明**：
-                - `title`、`q`、`question` 三个字段至少提供一个，最终接口只会采用其中一个（优先级：`title` > `q` > `question`）。
-                - `more` 参数已禁用，保留仅用于兼容旧版本，不建议使用。
-            parameters:
-                - name: token
-                  in: query
-                  description: 用户凭证，请在题库个人中心获取。
-                  required: true
-                  schema:
-                      type: string
-                - name: title
-                  in: query
-                  description: 查询的题目（与 `q`、`question` 三选一）。
-                  required: false
-                  schema:
-                      type: string
-                - name: q
-                  in: query
-                  description: 查询的题目（与 `title`、`question` 三选一）。
-                  required: false
-                  schema:
-                      type: string
-                - name: question
-                  in: query
-                  description: 查询的题目（与 `title`、`q` 三选一）。
-                  required: false
-                  schema:
-                      type: string
-                - name: options
-                  in: query
-                  description: 选项内容，多个选项用换行符分隔，用于AI辅助答题。
-                  required: false
-                  schema:
-                      type: string
-                - name: type
-                  in: query
-                  description: 题目类型，用于AI辅助答题。
-                  required: false
-                  schema:
-                      type: string
-                      enum: [single, multiple, judgement, completion, unknown]
-                - name: more
-                  in: query
-                  description: 是否返回多个搜索结果（此参数已禁用，不建议使用）。
-                  required: false
-                  schema:
-                      type: boolean
-                  deprecated: true
-            responses:
-                "200":
-                    description: 成功返回查询结果
-                    content:
-                        application/json:
-                            schema:
-                                $ref: "#/components/schemas/QueryResponse"
-                            examples:
-                                singleSuccess:
-                                    summary: 单条结果（more=false）
-                                    value:
-                                        code: 1
-                                        data:
-                                            question: "中国梦是什么？"
-                                            answer: "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。"
-                                            times: 666
-                                        message: "请求成功"
-                                singleNotFound:
-                                    summary: 未找到答案（单条模式）
-                                    value:
-                                        code: 0
-                                        data:
-                                            question: "未找到答案！"
-                                            answer: "很抱歉, 题目搜索不到。"
-                                            times: 665
-                                        message: "请求失败"
-                                multiSuccess:
-                                    summary: 多条结果（more=true）
-                                    value:
-                                        code: 1
-                                        data:
-                                            results:
-                                                - question: "中国梦是什么？"
-                                                  answer: "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。"
-                                            times: 666
-                                        message: "请求成功"
-                                multiNotFound:
-                                    summary: 未找到答案（多条模式）
-                                    value:
-                                        code: 0
-                                        data:
-                                            results: []
-                                            times: 665
-                                        message: "请求失败"
-
-    /info:
-        get:
-            summary: 题库信息获取接口
-            description: 获取当前 token 的剩余调用次数、总使用次数及成功次数。
-            parameters:
-                - name: token
-                  in: query
-                  description: 用户凭证，请在题库个人中心获取。
-                  required: true
-                  schema:
-                      type: string
-            responses:
-                "200":
-                    description: 成功返回信息
-                    content:
-                        application/json:
-                            schema:
-                                $ref: "#/components/schemas/InfoResponse"
-                            example:
-                                code: 1
-                                data:
-                                    times: 1000
-                                    user_times: 5000
-                                    success_times: 4800
-                                message: "请求成功"
-
-components:
-    schemas:
-        QueryResponse:
-            type: object
-            properties:
-                code:
-                    type: integer
-                    description: 1 表示有答案，0 表示无答案
-                    enum: [0, 1]
-                message:
-                    type: string
-                    description: 请求结果描述
-                data:
-                    oneOf:
-                        - $ref: "#/components/schemas/SingleResultData"
-                        - $ref: "#/components/schemas/MultiResultData"
-            required:
-                - code
-                - message
-                - data
-
-        SingleResultData:
-            type: object
-            properties:
-                question:
-                    type: string
-                    description: 搜索到的题目（可能与查询的 title 不完全一致）
-                answer:
-                    type: string
-                    description: 答案内容
-                times:
-                    type: integer
-                    description: 接口剩余次数
-                ai:
-                    type: boolean
-                    description: 若为 true 表示答案为 AI 生成（可能不存在）
-            required:
-                - question
-                - answer
-                - times
-
-        MultiResultData:
-            type: object
-            properties:
-                results:
-                    type: array
-                    description: 搜索结果列表
-                    items:
-                        type: object
-                        properties:
-                            question:
-                                type: string
-                            answer:
-                                type: string
-                            ai:
-                                type: boolean
-                                description: 若为 true 表示答案为 AI 生成（可能不存在）
-                        required:
-                            - question
-                            - answer
-                times:
-                    type: integer
-                    description: 接口剩余次数
-            required:
-                - results
-                - times
-
-        InfoResponse:
-            type: object
-            properties:
-                code:
-                    type: integer
-                    description: 1 表示成功，0 表示失败
-                    enum: [0, 1]
-                message:
-                    type: string
-                    description: 请求结果描述
-                data:
-                    type: object
-                    properties:
-                        times:
-                            type: integer
-                            description: 接口剩余次数
-                        user_times:
-                            type: integer
-                            description: 题库使用总次数
-                        success_times:
-                            type: integer
-                            description: 题库搜索成功次数
-                    required:
-                        - times
-                        - user_times
-                        - success_times
-            required:
-                - code
-                - message
-                - data
+# 或使用 pip
+pip install -e .
 ```
+
+### 2. 配置环境变量
+
+```bash
+# 复制配置文件
+cp .env.example .env
+
+# 编辑 .env 文件，配置模型参数
+MODEL_NAME=qwen3.5:2b
+EMBEDDING_MODEL_NAME=nomic-embed-text
+MODEL_TEMPERATURE=0.1
+```
+
+### 3. 初始化数据库
+
+```bash
+python src/init_db.py
+```
+
+这将创建：
+- 测试 Token（test123456, demo789012, user345678）
+- 题目分类（政治理论、历史文化、科学技术等）
+- 示例题目（8 道精选题目）
+
+### 4. 启动服务
+
+```bash
+python src/main.py
+```
+
+服务将在 `http://localhost:8000` 启动。
+
+### 5. 访问系统
+
+- **Web 界面**: http://localhost:8000
+- **API 文档**: http://localhost:8000/docs
+- **健康检查**: http://localhost:8000/health
+
+## 📖 API 文档
+
+### 查题接口
+
+**GET** `/api/query`
+
+根据题目内容搜索答案。
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| token | string | 是 | 用户凭证 |
+| question | string | 是 | 题目内容（与 title、q 三选一） |
+| title | string | 否 | 题目内容（优先级最高） |
+| q | string | 否 | 题目内容 |
+| options | string | 否 | 选项内容，多个用换行分隔 |
+| type | string | 否 | 题目类型（single/multiple/judgement/completion/unknown） |
+
+#### 响应示例
+
+```json
+{
+  "code": 1,
+  "message": "请求成功",
+  "data": {
+    "question": "中国梦的本质是什么？",
+    "answer": "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。",
+    "times": 999,
+    "ai": false
+  }
+}
+```
+
+### 配额查询接口
+
+**GET** `/api/info`
+
+获取当前 token 的调用次数统计。
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| token | string | 是 | 用户凭证 |
+
+#### 响应示例
+
+```json
+{
+  "code": 1,
+  "message": "请求成功",
+  "data": {
+    "times": 1000,
+    "user_times": 5000,
+    "success_times": 4800
+  }
+}
+```
+
+## 🎨 Web 界面
+
+### 主要功能
+
+1. **题目查询**
+   - 输入 Token 和题目内容
+   - 选择题目类型
+   - 填写选项（可选）
+   - 一键搜索答案
+
+2. **结果展示**
+   - JSON 格式化显示
+   - 成功/失败标识
+   - 实时加载状态
+
+3. **全屏查看**
+   - 点击"全屏查看"按钮
+   - 90% 屏幕空间展示详情
+   - 支持 ESC 键关闭
+
+4. **结果复制**
+   - 一键复制到剪贴板
+   - 即时反馈提示
+
+### 界面截图
+
+访问 http://localhost:8000 查看完整界面。
+
+## 💻 开发指南
+
+### 项目结构
+
+```
+ai-tiku/
+├── src/
+│   ├── agents/          # Agent 层
+│   │   ├── classification.py
+│   │   ├── reviewer.py
+│   │   └── rag_chat.py
+│   ├── prompts/         # 提示词模板
+│   │   ├── classify.py
+│   │   ├── query.py
+│   │   └── review.py
+│   ├── answer_retriever.py
+│   ├── api.py
+│   ├── db.py
+│   ├── llm.py
+│   ├── main.py
+│   ├── ui.py
+│   └── init_db.py
+├── data/                # 数据目录（自动生成）
+│   ├── db.sqlite3
+│   └── embeddings/
+├── .env                 # 环境变量配置
+├── .env.example         # 配置示例
+├── pyproject.toml       # 项目配置
+└── README.md            # 项目文档
+```
+
+### 添加新题目
+
+```python
+from src.db import db
+from src.agents.rag_chat import rag_chat
+
+# 添加到数据库
+question_id = db.add_question(
+    question_text="你的题目内容",
+    answer_text="正确答案",
+    is_ai_generated=False,
+    source="题库来源"
+)
+
+# 添加到向量库
+rag_chat.add_document(
+    question="你的题目内容",
+    answer="正确答案",
+    metadata={"question_id": question_id}
+)
+```
+
+### 使用分类 Agent
+
+```python
+from src.agents.classification import classifier
+
+# 对题目进行分类
+categories = classifier.classify(
+    question_text="题目内容",
+    options=["选项 A", "选项 B"]
+)
+
+# 分配分类
+classifier.assign_to_question(question_id, [category_id])
+```
+
+### 使用复审 Agent
+
+```python
+from src.agents.reviewer import reviewer
+
+# 复审答案
+result = reviewer.review(
+    question="题目内容",
+    answer="待审核的答案",
+    options=["选项 A", "选项 B"],
+    question_type="single"
+)
+
+print(f"是否正确：{result['is_correct']}")
+print(f"置信度：{result['confidence']}")
+```
+
+### 使用 RAG 对话
+
+```python
+from src.agents.rag_chat import rag_chat
+
+# 对话式问答
+response = rag_chat.chat("你的问题")
+print(response['answer'])
+print(response['sources'])  # 引用来源
+```
+
+## ⚙️ 配置说明
+
+### 环境变量
+
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| MODEL_NAME | qwen3.5:2b | LLM 模型名称 |
+| EMBEDDING_MODEL_NAME | nomic-embed-text | Embedding 模型名称 |
+| MODEL_TEMPERATURE | 0.1 | 模型温度（0-1） |
+| DATABASE_PATH | data/db.sqlite3 | SQLite 数据库路径 |
+| EMBEDDINGS_DIR | data/embeddings | 向量库目录 |
+
+### Ollama 配置
+
+确保已安装并运行 Ollama 服务：
+
+```bash
+# 拉取模型
+ollama pull qwen3.5:2b
+ollama pull nomic-embed-text
+
+# 启动服务
+ollama serve
+```
+
+### 自定义模型
+
+如需使用其他模型，修改 `.env` 文件：
+
+```bash
+# 使用 OpenAI
+MODEL_NAME=gpt-3.5-turbo
+EMBEDDING_MODEL_NAME=text-embedding-ada-002
+
+# 使用本地其他模型
+MODEL_NAME=llama3.2:3b
+EMBEDDING_MODEL_NAME=mxbai-embed-large
+```
+
+## 📊 数据库表结构
+
+### api_tokens - 用户凭证表
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 主键 ID |
+| token | TEXT | 用户唯一凭证 |
+| total_queries | INTEGER | 总查询次数 |
+| success_queries | INTEGER | 成功查询次数 |
+| remaining_queries | INTEGER | 剩余查询次数 |
+
+### questions - 题目表
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 题目 ID |
+| question_text | TEXT | 题目内容 |
+| answer_text | TEXT | 答案内容 |
+| is_ai_generated | INTEGER | 是否 AI 生成 |
+| source | TEXT | 题目来源 |
+
+### categories - 分类表
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER | 分类 ID |
+| name | TEXT | 分类名称 |
+| description | TEXT | 分类描述 |
+
+## 🔒 安全建议
+
+1. **Token 管理**：不要将真实 Token 提交到版本控制
+2. **环境变量**：敏感信息使用环境变量存储
+3. **访问控制**：生产环境配置适当的认证和限流机制
+4. **日志审计**：定期查看 query_logs 表监控使用情况
+
+## 📝 许可证
+
+本项目采用 MIT 许可证。
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+## 📧 联系方式
+
+- 项目地址：https://github.com/your-org/ai-tiku
+- 问题反馈：请提交 Issue
