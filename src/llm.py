@@ -1,27 +1,16 @@
 import os
-from langchain_ollama import OllamaLLM, OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings, OllamaLLM, ChatOllama
 
-llm = OllamaLLM(model=os.environ.get("MODEL_NAME", "qwen3"), temperature=0.1)
-
-
-def generate_completion(prompt, stream=False):
-    if stream:
-        return llm.stream(input=prompt)
-    return llm.invoke(input=prompt)
-
-
-async def async_generate_completion(prompt, stream=False):
-    if stream:
-        return await llm.astream(input=prompt)
-    return await llm.ainvoke(input=prompt)
+embedder = OllamaEmbeddings(
+    model=os.environ.get("EMBEDDING_MODEL_NAME", "nomic-embed-text")
+)
+completion = OllamaLLM(
+    model=os.environ.get("MODEL_NAME", "qwen3.5:2b"), temperature=0.1
+)
+chat = ChatOllama(model=os.environ.get("MODEL_NAME", "qwen3.5:2b"), temperature=0.1)
 
 
-embedder = OllamaEmbeddings(model=os.environ.get("MODEL_NAME", "nomic-embed-text"))
-
-
-def embed_documents(content):
-    return embedder.embed_documents(content)
-
-
-def embed_query(content):
-    return embedder.embed_query(content)
+if __name__ == "__main__":
+    query = "What is the meaning of life?"
+    result = chat.invoke([query])
+    print(result.content)
