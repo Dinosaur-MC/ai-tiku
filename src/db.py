@@ -189,7 +189,7 @@ class VectorStore:
         self.category_id = category_id
         self.index_path = EMBEDDINGS_DIR / f"faiss_{category_id}.index"
         self.embedder = OllamaEmbeddings(
-            model=os.environ.get("EMBEDDING_MODEL_NAME", "nomic-embed-text")
+            model=os.environ.get("EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b")
         )
         self.index = None
         self.docstore = {}  # 存储 ID 到文档的映射

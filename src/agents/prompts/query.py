@@ -1,40 +1,26 @@
 """
-题目查询提示词模板
+题目查询提示词模板 - 优化版
 用于指导 LLM 准确回答题目或生成答案
 """
 
-QUERY_SYSTEM_PROMPT = """你是一个专业的题库答题助手。你的任务是根据用户提供的题目，给出准确、简洁的答案。
+QUERY_SYSTEM_PROMPT = """你是一个专业的题库答题助手。请根据题目要求，给出准确、简洁的答案。
 
-答题原则：
-1. 准确性：确保答案正确无误
-2. 简洁性：直接给出答案，不要冗长解释
-3. 规范性：按照题型要求作答
-   - 选择题：只给出选项字母（如：A 或 AB）
-   - 判断题：只给出"正确"或"错误"
-   - 填空题：给出具体的填空内容
-   - 简答题：给出核心要点
-4. 如果无法确定答案，诚实地表示不知道
+**答题规范**：
+- 选择题：只输出选项字母（如：A 或 AB）
+- 判断题：只输出"正确"或"错误"
+- 填空题：输出具体填空内容
+- 简答题：输出核心要点
 
-输出格式：
-- 直接输出答案内容，不需要额外的说明或解释
-- 选择题只需输出选项字母
-- 判断题输出"正确"或"错误"
-- 其他题型输出具体答案
-"""
+**要求**：直接输出答案，不要任何解释或多余内容。"""
 
-QUERY_USER_PROMPT_TEMPLATE = """请回答以下问题：
-
-题目：{question}
-
+QUERY_USER_PROMPT_TEMPLATE = """{type_section}题目：{question}
 {options_section}
-
-{type_section}
-
-请直接给出答案，不需要解释。"""
+答案："""
 
 
-def build_query_prompt(question: str, options: list = None, 
-                      question_type: str = "unknown") -> str:
+def build_query_prompt(
+    question: str, options: list = None, question_type: str = "unknown"
+) -> tuple[str, str]:
     """
     构建完整的查询提示词
     
@@ -44,34 +30,36 @@ def build_query_prompt(question: str, options: list = None,
         question_type: 题目类型
     
     Returns:
-        完整的提示词字符串
+        (system_prompt, user_prompt) 元组
     """
     # 构建选项部分
     options_section = ""
     if options:
         options_lines = [f"{chr(65 + i)}. {opt}" for i, opt in enumerate(options)]
-        options_section = f"选项：\n{'\n'.join(options_lines)}\n"
-    
+        options_section = "\n".join(options_lines)
+
     # 构建题型部分
     type_section = ""
     if question_type and question_type != "unknown":
         type_map = {
-            "single": "单选题",
-            "multiple": "多选题",
-            "judgement": "判断题",
-            "completion": "填空题",
-            "essay": "简答题",
-            "analysis": "分析题",
-            "unknown": "未知题型"
+            "single": "【单选题】",
+            "multiple": "【多选题】",
+            "judgement": "【判断题】",
+            "completion": "【填空题】",
+            "essay": "【简答题】",
+            "analysis": "【分析题】",
         }
-        type_name = type_map.get(question_type, "未知题型")
-        type_section = f"题型：{type_name}\n"
-    
-    return QUERY_USER_PROMPT_TEMPLATE.format(
+        type_section = type_map.get(question_type, "")
+        if type_section:
+            type_section += "\n"
+
+    user_prompt = QUERY_USER_PROMPT_TEMPLATE.format(
+        type_section=type_section,
         question=question,
-        options_section=options_section,
-        type_section=type_section
+        options_section=options_section
     )
+    
+    return QUERY_SYSTEM_PROMPT, user_prompt
 
 
 # AI 生成答案提示词
@@ -106,17 +94,11 @@ CONVERSATIONAL_QUERY_PROMPT = """结合对话历史和相关资料，回答用�
 请基于以上信息，给出准确、完整的回答。如果资料中没有相关信息，请如实告知。"""
 
 
-# 带置信度的答案生成提示词
-CONFIDENCE_ANSWER_PROMPT = """请回答以下问题，并评估你对答案的置信度。
-
-题目：{question}
-
+# 带置信度的答案生成提示词（简化版）
+CONFIDENCE_ANSWER_PROMPT = """题目：{question}
 {options_section}
+答案：{answer}
 
-请返回 JSON 格式：
-{{
-    "answer": "你的答案",
-    "confidence": 0.0-1.0 之间的浮点数，
-    "reasoning": "简要说明答案的依据"
-}}
+请用 JSON 格式返回：
+{{"confidence": 0.85, "reasoning": "一句话理由"}}
 """

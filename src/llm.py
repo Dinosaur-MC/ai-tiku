@@ -5,19 +5,19 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 # 初始化 Embeddings
 embedder = OllamaEmbeddings(
-    model=os.environ.get("EMBEDDING_MODEL_NAME", "nomic-embed-text")
+    model=os.environ.get("EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b")
 )
 
 # 初始化 Completion 模型
 completion = OllamaLLM(
-    model=os.environ.get("MODEL_NAME", "qwen3.5:2b"),
-    temperature=float(os.environ.get("MODEL_TEMPERATURE", "0.1")),
+    model=os.environ.get("MODEL_NAME", "qwen3.5:0.8b"),
+    temperature=float(os.environ.get("MODEL_TEMPERATURE", "0.0")),
 )
 
 # 初始化 Chat 模型
 chat = ChatOllama(
-    model=os.environ.get("MODEL_NAME", "qwen3.5:2b"),
-    temperature=float(os.environ.get("MODEL_TEMPERATURE", "0.1")),
+    model=os.environ.get("MODEL_NAME", "qwen3.5:0.8b"),
+    temperature=float(os.environ.get("MODEL_TEMPERATURE", "0.0")),
 )
 
 

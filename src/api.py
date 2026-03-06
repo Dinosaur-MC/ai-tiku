@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Union, Dict, Any
 from db import db
 from services.vector_search import vector_search
-from services.ai_responder import ai_responder
+from services.ai_service import ai_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -141,7 +141,7 @@ async def query_question(
 
         # 2. 未找到相似题目或强制使用 AI，使用 LLM 生成答案
         if result is None:
-            ai_answer = ai_responder.generate_answer(
+            ai_answer = ai_service.generate_answer(
                 query_text, options_list, type or "unknown"
             )
             result = {
