@@ -2,15 +2,16 @@
 API Token 模型
 """
 
-from sqlmodel import SQLModel, Field, Relationship
+from . import BaseModel
+from sqlmodel import Field, Relationship
 from typing import TYPE_CHECKING, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 if TYPE_CHECKING:
     from .query_log import QueryLog
 
 
-class ApiToken(SQLModel, table=True):
+class ApiToken(BaseModel, table=True):
     """API 用户凭证表"""
 
     __tablename__ = "api_tokens"
@@ -20,8 +21,7 @@ class ApiToken(SQLModel, table=True):
     total_queries: int = Field(default=0)
     success_queries: int = Field(default=0)
     remaining_queries: int = Field(default=1000)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # 关联查询日志
     query_logs: list["QueryLog"] = Relationship(back_populates="token")
