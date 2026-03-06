@@ -74,7 +74,7 @@ def verify_token(token: str = Query(..., description="用户凭证")):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的 token，请在题库个人中心获取有效 token"
         )
-    if token_info['remaining_queries'] <= 0:
+    if token_info.remaining_queries <= 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Token 配额已用完，请充值或联系管理员"
@@ -126,18 +126,18 @@ async def query_question(
         
         # 更新 token 使用统计
         found = result.get('found', False)
-        db.update_token_usage(token_info['id'], success=found)
+        db.update_token_usage(token_info.id, success=found)
         
         # 记录查询日志
         db.log_query(
-            token_id=token_info['id'],
+            token_id=token_info.id,
             query_text=query_text,
             found=found
         )
         
         # 获取更新后的 token 信息
-        updated_token = db.get_token_info(token_info['id'])
-        remaining = updated_token['remaining_queries'] if updated_token else 0
+        updated_token = db.get_token_info(token_info.id)
+        remaining = updated_token.remaining_queries if updated_token else 0
         
         # 构建响应
         if not more:
@@ -202,9 +202,9 @@ async def get_info(
     """
     try:
         info_data = {
-            "times": token_info['remaining_queries'],
-            "user_times": token_info['total_queries'],
-            "success_times": token_info['success_queries']
+            "times": token_info.remaining_queries,
+            "user_times": token_info.total_queries,
+            "success_times": token_info.success_queries
         }
         return InfoResponse(
             code=1,

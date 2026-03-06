@@ -1,22 +1,23 @@
 """
-数据库初始化脚本
+测试数据初始化脚本
 用于创建测试数据和初始配置
+注意：此文件仅用于测试目的，生产环境不应使用
 """
 
 import sys
 from pathlib import Path
 
 # 添加 src 到路径
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from db import db, VectorStore
 from agents.rag_chat import rag_chat
 
 
-def init_database():
-    """初始化数据库并添加测试数据"""
+def init_test_data():
+    """初始化测试数据"""
     print("=" * 60)
-    print("开始初始化数据库...")
+    print("开始初始化测试数据...")
     print("=" * 60)
     
     # 1. 创建测试 Token
@@ -30,7 +31,7 @@ def init_database():
     for token_str, remaining in test_tokens:
         try:
             token_info = db.create_token(token_str, remaining)
-            print(f"   ✓ Token '{token_str}' 创建成功 (剩余次数：{token_info['remaining_queries']})")
+            print(f"   ✓ Token '{token_str}' 创建成功 (剩余次数：{token_info.remaining_queries})")
         except Exception as e:
             if "UNIQUE constraint failed" in str(e):
                 print(f"   ⚠ Token '{token_str}' 已存在，跳过")
@@ -155,7 +156,7 @@ def init_database():
     
     # 5. 记录日志
     print("\n" + "=" * 60)
-    print("数据库初始化完成！")
+    print("测试数据初始化完成！")
     print("=" * 60)
     print(f"\n统计信息:")
     print(f"  - Token 数量：{len(test_tokens)}")
@@ -169,4 +170,4 @@ def init_database():
 
 
 if __name__ == "__main__":
-    init_database()
+    init_test_data()

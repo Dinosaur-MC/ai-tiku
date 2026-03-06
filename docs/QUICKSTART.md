@@ -61,8 +61,8 @@ python start.py
 ### 方式二：分步启动
 
 ```bash
-# 1. 初始化数据库（首次运行）
-python src/init_db.py
+# 1. 初始化数据库和测试数据（首次运行）
+python src/test/init_test_data.py
 
 # 2. 启动服务
 python src/main.py
@@ -209,7 +209,7 @@ Token: test123456
 **解决方案：**
 1. 确认 Token 拼写正确
 2. 使用测试 Token：`test123456`
-3. 运行 `python src/init_db.py` 重新初始化
+3. 运行 `python src/test/init_test_data.py` 重新初始化测试数据
 
 ### Q3: AI 生成答案不准确
 
@@ -249,7 +249,31 @@ ollama serve
 ### 示例题目
 - 8 道精选题目，涵盖各分类
 
-## 🛠️ 进阶使用
+## 🧪 测试与初始化
+
+### 初始化测试数据
+
+首次使用或需要重置测试数据时运行：
+
+```bash
+python src/test/init_test_data.py
+```
+
+这将创建：
+- 3 个测试 Token
+- 6 个题目分类
+- 8 道示例题目
+- 向量化索引
+
+### 运行测试脚本
+
+```bash
+# 测试 API 功能
+python src/test/test_api.py
+
+# 测试数据库模型
+python src/test/test_sqlmodel.py
+```
 
 ### 添加新题目
 

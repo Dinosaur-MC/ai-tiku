@@ -1,14 +1,22 @@
+"""
+数据库会话管理和操作类
+基于 SQLModel 实现，避免直接使用 SQL
+"""
 import os
-import sqlite3
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from datetime import datetime
-import json
-
+from sqlmodel import SQLModel, create_engine, Session, select
 from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
 import faiss
 import numpy as np
+import json
+
+from models.token import ApiToken
+from models.question import Question
+from models.query_log import QueryLog
+from models.category import Category
+from models.question_category import QuestionCategory
 
 # 获取项目根目录
 ROOT_DIR = Path(__file__).parent.parent
@@ -21,227 +29,157 @@ DATA_DIR.mkdir(exist_ok=True)
 EMBEDDINGS_DIR.mkdir(exist_ok=True)
 
 
+def get_engine():
+    """获取数据库引擎"""
+    return create_engine(
+        f"sqlite:///{DB_PATH}",
+        echo=False,
+        connect_args={"check_same_thread": False}
+    )
+
+
+def create_db_and_tables():
+    """创建数据库和表"""
+    engine = get_engine()
+    SQLModel.metadata.create_all(engine)
+
+
+def get_session():
+    """获取数据库会话"""
+    engine = get_engine()
+    with Session(engine) as session:
+        yield session
+
+
 class Database:
-    """SQLite 数据库管理类"""
+    """数据库操作类（基于 SQLModel）"""
     
-    def __init__(self, db_path: str = None):
-        self.db_path = db_path or DB_PATH
-        self.init_database()
+    def __init__(self):
+        self.engine = get_engine()
+        # 初始化时自动创建表
+        SQLModel.metadata.create_all(self.engine)
     
-    def get_connection(self):
-        """获取数据库连接"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _get_session(self):
+        """获取会话"""
+        return Session(self.engine)
     
-    def init_database(self):
-        """初始化数据库表结构"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # 创建用户凭证表
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS api_tokens (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token TEXT NOT NULL UNIQUE,
-                total_queries INTEGER NOT NULL DEFAULT 0,
-                success_queries INTEGER NOT NULL DEFAULT 0,
-                remaining_queries INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # 创建题库主表
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS questions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                question_text TEXT NOT NULL,
-                answer_text TEXT NOT NULL,
-                is_ai_generated INTEGER NOT NULL DEFAULT 0,
-                source TEXT,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # 创建查询日志表
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS query_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token_id INTEGER NOT NULL,
-                query_text TEXT NOT NULL,
-                found INTEGER NOT NULL DEFAULT 0,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (token_id) REFERENCES api_tokens(id) ON DELETE CASCADE
-            )
-        ''')
-        
-        # 创建分类表
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                description TEXT
-            )
-        ''')
-        
-        # 创建题目 - 分类关联表
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS question_category (
-                question_id INTEGER NOT NULL,
-                category_id INTEGER NOT NULL,
-                PRIMARY KEY (question_id, category_id),
-                FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
-                FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+    # ========== Token 相关操作 ==========
     
-    # Token 相关操作
-    def get_token_by_value(self, token: str) -> Optional[Dict]:
+    def get_token_by_value(self, token: str) -> Optional[ApiToken]:
         """根据 token 值获取用户信息"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM api_tokens WHERE token = ?", (token,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        with self._get_session() as session:
+            statement = select(ApiToken).where(ApiToken.token == token)
+            result = session.exec(statement)
+            return result.first()
     
-    def create_token(self, token: str, remaining_queries: int = 1000) -> Dict:
+    def create_token(self, token: str, remaining_queries: int = 1000) -> ApiToken:
         """创建新的 token"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO api_tokens (token, total_queries, success_queries, remaining_queries)
-            VALUES (?, 0, 0, ?)
-        ''', (token, remaining_queries))
-        conn.commit()
-        
-        cursor.execute("SELECT * FROM api_tokens WHERE token = ?", (token,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row)
+        with self._get_session() as session:
+            db_token = ApiToken(
+                token=token,
+                total_queries=0,
+                success_queries=0,
+                remaining_queries=remaining_queries
+            )
+            session.add(db_token)
+            session.commit()
+            session.refresh(db_token)
+            return db_token
     
     def update_token_usage(self, token_id: int, success: bool = False):
         """更新 token 使用统计"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # 增加总查询次数
-        cursor.execute('''
-            UPDATE api_tokens 
-            SET total_queries = total_queries + 1,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        ''', (token_id,))
-        
-        if success:
-            # 增加成功查询次数
-            cursor.execute('''
-                UPDATE api_tokens 
-                SET success_queries = success_queries + 1,
-                    remaining_queries = MAX(0, remaining_queries - 1),
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (token_id,))
-        
-        conn.commit()
-        conn.close()
+        with self._get_session() as session:
+            db_token = session.get(ApiToken, token_id)
+            if db_token:
+                db_token.total_queries += 1
+                from datetime import datetime
+                db_token.updated_at = datetime.utcnow()
+                
+                if success:
+                    db_token.success_queries += 1
+                    db_token.remaining_queries = max(0, db_token.remaining_queries - 1)
+                
+                session.add(db_token)
+                session.commit()
     
-    def get_token_info(self, token_id: int) -> Optional[Dict]:
+    def get_token_info(self, token_id: int) -> Optional[ApiToken]:
         """获取 token 的统计信息"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM api_tokens WHERE id = ?", (token_id,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        with self._get_session() as session:
+            return session.get(ApiToken, token_id)
     
-    # Question 相关操作
+    # ========== Question 相关操作 ==========
+    
     def add_question(self, question_text: str, answer_text: str, 
                      is_ai_generated: bool = False, source: str = None) -> int:
         """添加题目"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO questions (question_text, answer_text, is_ai_generated, source)
-            VALUES (?, ?, ?, ?)
-        ''', (question_text, answer_text, 1 if is_ai_generated else 0, source))
-        conn.commit()
-        question_id = cursor.lastrowid
-        conn.close()
-        return question_id
+        with self._get_session() as session:
+            question = Question(
+                question_text=question_text,
+                answer_text=answer_text,
+                is_ai_generated=is_ai_generated,
+                source=source
+            )
+            session.add(question)
+            session.commit()
+            session.refresh(question)
+            return question.id
     
-    def search_questions(self, query_text: str, limit: int = 5) -> List[Dict]:
-        """搜索题目（基于全文搜索）"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT * FROM questions 
-            WHERE question_text LIKE ? OR answer_text LIKE ?
-            LIMIT ?
-        ''', (f'%{query_text}%', f'%{query_text}%', limit))
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+    def search_questions(self, query_text: str, limit: int = 5) -> List[Question]:
+        """搜索题目（基于 LIKE 查询）"""
+        with self._get_session() as session:
+            # 使用 ORM 的 like 方法
+            statement = select(Question).where(
+                (Question.question_text.contains(query_text)) |
+                (Question.answer_text.contains(query_text))
+            ).limit(limit)
+            results = session.exec(statement)
+            return results.all()
     
-    def get_question_by_id(self, question_id: int) -> Optional[Dict]:
+    def get_question_by_id(self, question_id: int) -> Optional[Question]:
         """根据 ID 获取题目"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM questions WHERE id = ?", (question_id,))
-        row = cursor.fetchone()
-        conn.close()
-        return dict(row) if row else None
+        with self._get_session() as session:
+            return session.get(Question, question_id)
     
-    # Query Log 相关操作
+    # ========== Query Log 相关操作 ==========
+    
     def log_query(self, token_id: int, query_text: str, found: bool):
         """记录查询日志"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO query_logs (token_id, query_text, found)
-            VALUES (?, ?, ?)
-        ''', (token_id, query_text, 1 if found else 0))
-        conn.commit()
-        conn.close()
+        with self._get_session() as session:
+            query_log = QueryLog(
+                token_id=token_id,
+                query_text=query_text,
+                found=found
+            )
+            session.add(query_log)
+            session.commit()
     
-    # Category 相关操作
+    # ========== Category 相关操作 ==========
+    
     def create_category(self, name: str, description: str = None) -> int:
         """创建分类"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO categories (name, description)
-            VALUES (?, ?)
-        ''', (name, description))
-        conn.commit()
-        category_id = cursor.lastrowid
-        conn.close()
-        return category_id
+        with self._get_session() as session:
+            category = Category(name=name, description=description)
+            session.add(category)
+            session.commit()
+            session.refresh(category)
+            return category.id
     
-    def get_all_categories(self) -> List[Dict]:
+    def get_all_categories(self) -> List[Category]:
         """获取所有分类"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM categories")
-        rows = cursor.fetchall()
-        conn.close()
-        return [dict(row) for row in rows]
+        with self._get_session() as session:
+            statement = select(Category)
+            results = session.exec(statement)
+            return results.all()
     
     def assign_category(self, question_id: int, category_id: int):
         """为题目分配分类"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR IGNORE INTO question_category (question_id, category_id)
-            VALUES (?, ?)
-        ''', (question_id, category_id))
-        conn.commit()
-        conn.close()
+        with self._get_session() as session:
+            # 检查是否已存在
+            existing = session.get(QuestionCategory, (question_id, category_id))
+            if not existing:
+                qc = QuestionCategory(question_id=question_id, category_id=category_id)
+                session.add(qc)
+                session.commit()
 
 
 class VectorStore:
