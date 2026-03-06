@@ -195,7 +195,6 @@ async def query_question(
 
 @router.get("/info", response_model=InfoResponse, summary="题库信息获取接口")
 async def get_info(
-    token: str = Query(..., description="用户凭证"),
     token_info: dict = Depends(verify_token)
 ):
     """

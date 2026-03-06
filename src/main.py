@@ -1,10 +1,11 @@
 from dotenv import load_dotenv
-from fastapi.responses import FileResponse
+from pathlib import Path
 
 load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 import logging
 
 # 配置日志
@@ -16,6 +17,9 @@ app = FastAPI(
     title="AI-Tiku API",
     description="AI 题库答题服务系统，提供查题及题库信息查询功能",
     version="1.0.0",
+    docs_url="/docs",      # Swagger UI 文档路径
+    redoc_url="/redoc",    # ReDoc 文档路径
+    openapi_url="/openapi.json",  # OpenAPI schema 路径
 )
 
 app.add_middleware(
@@ -26,15 +30,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 导入并注册 API 路由
+# 导入并注册 API 路由（先注册 API 路由）
 from api import include_router as include_api_router
 
 include_api_router(app)
-
-# 导入并注册 UI 路由
-from ui import include_router as include_ui_router
-
-include_ui_router(app)
 
 
 # 健康检查端点
@@ -44,16 +43,24 @@ async def health_check():
     return {"status": "healthy"}
 
 
+# 根路径重定向到 UI 页面
 @app.get("/", tags=["Root"])
 async def root():
-    """根路径"""
-    return {"message": "Welcome to AI-Tiku API", "docs": "/docs", "health": "/health"}
+    """根路径 - 返回 UI 页面"""
+    return FileResponse(Path(__file__).parent / "index.html")
 
 
+# favicon 处理
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """图标"""
-    return FileResponse("favicon.ico")
+    # 如果存在 favicon.ico 则返回，否则返回 404
+    favicon_path = Path(__file__).parent / "favicon.ico"
+    if favicon_path.exists():
+        return FileResponse(favicon_path)
+    else:
+        from fastapi.responses import Response
+        return Response(status_code=404)
 
 
 def main():

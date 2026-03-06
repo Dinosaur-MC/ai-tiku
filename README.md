@@ -160,7 +160,9 @@ python src/main.py
 
 - **Web 界面**: http://localhost:8000
 - **API 文档**: http://localhost:8000/docs
+- **ReDoc 文档**: http://localhost:8000/redoc
 - **健康检查**: http://localhost:8000/health
+- **OpenAPI Schema**: http://localhost:8000/openapi.json
 
 ## 📖 API 文档
 
@@ -183,7 +185,7 @@ python src/main.py
 
 #### 响应示例
 
-```json
+``json
 {
   "code": 1,
   "message": "请求成功",
@@ -210,7 +212,7 @@ python src/main.py
 
 #### 响应示例
 
-```json
+``json
 {
   "code": 1,
   "message": "请求成功",
