@@ -17,8 +17,8 @@ app = FastAPI(
     title="AI-Tiku API",
     description="AI 题库答题服务系统，提供查题及题库信息查询功能",
     version="1.0.0",
-    docs_url="/docs",      # Swagger UI 文档路径
-    redoc_url="/redoc",    # ReDoc 文档路径
+    docs_url="/docs",  # Swagger UI 文档路径
+    redoc_url="/redoc",  # ReDoc 文档路径
     openapi_url="/openapi.json",  # OpenAPI schema 路径
 )
 
@@ -60,6 +60,7 @@ async def favicon():
         return FileResponse(favicon_path)
     else:
         from fastapi.responses import Response
+
         return Response(status_code=404)
 
 
