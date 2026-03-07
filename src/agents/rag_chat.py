@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 import logging
 
-from llm import chat
+from utils.llm import chat
 from db import VectorStore
 
 logger = logging.getLogger(__name__)

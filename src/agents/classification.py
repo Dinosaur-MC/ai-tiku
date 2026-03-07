@@ -11,7 +11,7 @@ import logging
 import json
 import re
 
-from llm import chat
+from utils.llm import chat
 from agents.prompts.classify import build_classification_prompt
 
 logger = logging.getLogger(__name__)

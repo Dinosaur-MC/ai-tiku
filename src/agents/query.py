@@ -8,9 +8,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 import logging
-import sys
 
-from llm import chat
+from utils.llm import chat
 from agents.prompts.query import build_query_prompt, CONFIDENCE_ANSWER_PROMPT
 
 logger = logging.getLogger(__name__)

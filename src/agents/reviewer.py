@@ -9,7 +9,7 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 import logging
 
-from llm import chat
+from utils.llm import chat
 from agents.prompts.review import build_review_prompt
 
 logger = logging.getLogger(__name__)
