@@ -13,10 +13,12 @@ dependencies = [
     "langchain-community>=0.4.1",
     "langchain-ollama>=1.0.1",
     "langchain-openai>=1.1.10",
+    "langchain-openrouter>=0.1.0",
     "langchain-text-splitters>=1.1.1",
     "ollama>=0.6.1",
     "pydantic>=2.12.5",
     "pysqlite3>=0.6.0",
+    "pytest>=9.0.2",
     "sqlmodel>=0.0.37",
     "uvicorn>=0.41.0",
 ]

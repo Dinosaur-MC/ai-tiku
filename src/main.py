@@ -66,8 +66,6 @@ async def favicon():
     if favicon_path.exists():
         return FileResponse(favicon_path)
     else:
-        from fastapi.responses import Response
-
         return Response(status_code=404)
 
 

@@ -19,10 +19,12 @@ dependencies = [
     { name = "langchain-community" },
     { name = "langchain-ollama" },
     { name = "langchain-openai" },
+    { name = "langchain-openrouter" },
     { name = "langchain-text-splitters" },
     { name = "ollama" },
     { name = "pydantic" },
     { name = "pysqlite3" },
+    { name = "pytest" },
     { name = "sqlmodel" },
     { name = "uvicorn" },
 ]
@@ -37,10 +39,12 @@ requires-dist = [
     { name = "langchain-community", specifier = ">=0.4.1" },
     { name = "langchain-ollama", specifier = ">=1.0.1" },
     { name = "langchain-openai", specifier = ">=1.1.10" },
+    { name = "langchain-openrouter", specifier = ">=0.1.0" },
     { name = "langchain-text-splitters", specifier = ">=1.1.1" },
     { name = "ollama", specifier = ">=0.6.1" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pysqlite3", specifier = ">=0.6.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
     { name = "sqlmodel", specifier = ">=0.0.37" },
     { name = "uvicorn", specifier = ">=0.41.0" },
 ]
@@ -564,6 +568,15 @@ wheels = [
 ]
 
 [[package]]
+name = "iniconfig"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
+]
+
+[[package]]
 name = "jiter"
 version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
@@ -751,6 +764,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d6/0f/01147f842499338ae3b0dd0a351fb83006d9ed623cf3a999bd68ba5bbe2d/langchain_openai-1.1.10.tar.gz", hash = "sha256:ca6fae7cf19425acc81814efed59c7d205ec9a1f284fd1d08aae9bda85d6501b", size = 1059755, upload-time = "2026-02-17T18:03:44.506Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/72/17/3785cbcdc81c451179247e4176d2697879cb4f45ab2c59d949ca574e072d/langchain_openai-1.1.10-py3-none-any.whl", hash = "sha256:d91b2c09e9fbc70f7af45345d3aa477744962d41c73a029beb46b4f83b824827", size = 87205, upload-time = "2026-02-17T18:03:43.502Z" },
+]
+
+[[package]]
+name = "langchain-openrouter"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "openrouter" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/6e/6e8a4156da07ba4827030302abad3b3e3c757f3c186f9cbb448d87cdd6fb/langchain_openrouter-0.1.0.tar.gz", hash = "sha256:3321fdab013a7bf370391497553a61a0368f81955128ceee020a815912bdbd62", size = 151982, upload-time = "2026-03-04T21:09:55.214Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/7a/e371200933a0091f62a7bc2011eb2894539f9fd21b31625f650aa3496519/langchain_openrouter-0.1.0-py3-none-any.whl", hash = "sha256:263a2d6e133a8a39cacafe499a7c29a191e39af8352e6f177d73af78673ebe8d", size = 18723, upload-time = "2026-03-04T21:09:54.315Z" },
 ]
 
 [[package]]
@@ -1055,6 +1081,20 @@ wheels = [
 ]
 
 [[package]]
+name = "openrouter"
+version = "0.7.11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpcore" },
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/36/07/75d8dbe6fa40017901e10acc587996229630a89c8b1f150a73fc0df9a01d/openrouter-0.7.11.tar.gz", hash = "sha256:3dcfb7c3d5a0909cca50d67b79f71f3847d03f922108ce22a91087edf2948ac8", size = 147847, upload-time = "2026-02-23T23:04:33.845Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1f/32/cfff59bdb81e5cd40bcfb01a33962c5299e3373ad24fadcb2c7f7e61a2f0/openrouter-0.7.11-py3-none-any.whl", hash = "sha256:102b4bccd435b928906ab73b111005260874a36b2ca9b34b8875b19981b09e4c", size = 300058, upload-time = "2026-02-23T23:04:35.028Z" },
+]
+
+[[package]]
 name = "orjson"
 version = "3.11.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1153,6 +1193,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/65/ee/299d360cdc32edc7d2cf530f3accf79c4fca01e96ffc950d8a52213bd8e4/packaging-26.0.tar.gz", hash = "sha256:00243ae351a257117b6a241061796684b084ed1c516a08c48a3f7e147a9d80b4", size = 143416, upload-time = "2026-01-21T20:50:39.064Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/b9/c538f279a4e237a006a2c98387d081e9eb060d203d8ed34467cc0f0b9b53/packaging-26.0-py3-none-any.whl", hash = "sha256:b36f1fef9334a5588b4166f8bcd26a14e521f2b55e6b9de3aaa80d3ff7a37529", size = 74366, upload-time = "2026-01-21T20:50:37.788Z" },
+]
+
+[[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
 ]
 
 [[package]]
@@ -1340,6 +1389,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pygments"
+version = "2.19.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b0/77/a5b8c569bf593b0140bde72ea885a803b82086995367bf2037de0159d924/pygments-2.19.2.tar.gz", hash = "sha256:636cb2477cec7f8952536970bc533bc43743542f70392ae026374600add5b887", size = 4968631, upload-time = "2025-06-21T13:39:12.283Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c7/21/705964c7812476f378728bdf590ca4b771ec72385c533964653c68e86bdc/pygments-2.19.2-py3-none-any.whl", hash = "sha256:86540386c03d588bb81d44bc3928634ff26449851e99741617ecb9037ee5ec0b", size = 1225217, upload-time = "2025-06-21T13:39:07.939Z" },
+]
+
+[[package]]
 name = "pysqlite3"
 version = "0.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1360,6 +1418,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/46/c8/f490d4890f1d1541efda54fea9249f9ae264c46fd5d0e12e5e2757f6abcb/pysqlite3-0.6.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:65a9af11004d350538b6bd852b0ec22cdd62928be9ab522d85c0840d5bf92a72", size = 4531310, upload-time = "2026-01-05T18:29:28.293Z" },
     { url = "https://files.pythonhosted.org/packages/e0/c3/ff97773adf35afaadaa969ae9fa20f09d25732b2ceba0b986f7039a89c6b/pysqlite3-0.6.0-cp314-cp314-win32.whl", hash = "sha256:cc9787dc409f800e310c8a457b7c98d1c4d4a76e15821b7fb460c0e63554ddd8", size = 744085, upload-time = "2026-01-05T18:29:29.277Z" },
     { url = "https://files.pythonhosted.org/packages/bc/76/103fc35bec8934c672b5193eadc66384472fd071c269cd95bc4b16595d17/pysqlite3-0.6.0-cp314-cp314-win_amd64.whl", hash = "sha256:81226436fae52d3bec4ce578104c5bcf4c22d3fcf29d4a590fcbde56b90472ef", size = 903944, upload-time = "2026-01-05T18:29:30.309Z" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d1/db/7ef3487e0fb0049ddb5ce41d3a49c235bf9ad299b6a25d5780a89f19230f/pytest-9.0.2.tar.gz", hash = "sha256:75186651a92bd89611d1d9fc20f0b4345fd827c41ccd5c299a868a05d70edf11", size = 1568901, upload-time = "2025-12-06T21:30:51.014Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/ab/b3226f0bd7cdcf710fbede2b3548584366da3b19b5021e74f5bde2a8fa3f/pytest-9.0.2-py3-none-any.whl", hash = "sha256:711ffd45bf766d5264d487b917733b453d917afd2b0ad65223959f59089f875b", size = 374801, upload-time = "2025-12-06T21:30:49.154Z" },
 ]
 
 [[package]]
