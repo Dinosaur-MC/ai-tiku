@@ -1,6 +1,13 @@
-from fastapi import APIRouter, Request, Response, status, HTTPException, Depends, Query
+from fastapi import (
+    APIRouter,
+    FastAPI,
+    status,
+    HTTPException,
+    Depends,
+    Query,
+)
 from pydantic import BaseModel, Field
-from typing import Optional, List, Union, Dict, Any
+from typing import Optional, List, Union, Dict
 from db import db
 from services.vector_search import vector_search
 from services.ai_service import ai_service
@@ -230,6 +237,6 @@ async def get_info(token_info: dict = Depends(verify_token)):
 
 
 # 注册路由到主应用
-def include_router(app):
+def include_router(app: FastAPI):
     """将路由注册到 FastAPI 应用"""
     app.include_router(router, prefix="/api")

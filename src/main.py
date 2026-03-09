@@ -1,12 +1,13 @@
 from dotenv import load_dotenv
-from pathlib import Path
 
 load_dotenv()
 
-from fastapi import FastAPI
+from pathlib import Path
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import logging
+
 
 # 配置日志
 logging.basicConfig(
@@ -48,6 +49,12 @@ async def health_check():
 async def root():
     """根路径 - 返回 UI 页面"""
     return FileResponse(Path(__file__).parent / "index.html")
+
+
+@app.head("/", tags=["Root"])
+async def root_head():
+    """根路径 HEAD 请求 - 返回响应头"""
+    return Response()
 
 
 # favicon 处理

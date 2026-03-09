@@ -284,5 +284,6 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+.temp/
 data/
 src/test/

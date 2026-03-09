@@ -63,31 +63,14 @@ class QueryAgent:
             logger.debug(f"系统提示：{system_prompt[:80]}...")
             logger.debug(f"用户提示：{user_prompt[:100]}...")
 
-            # 2. 调用 LLM（使用 stream 模式）
+            # 2. 调用 LLM
             messages = [
                 SystemMessage(content=system_prompt),
                 HumanMessage(content=user_prompt),
             ]
-
-            logger.info(f"开始调用 LLM（流式输出）...")
-
-            # 使用 stream 模式实时输出 LLM 响应
-            answer_chunks = []
-            print("\n[LLM 实时响应]: ", end="", flush=True)
-
-            for chunk in chat.stream(messages):
-                content = chunk.content if hasattr(chunk, "content") else str(chunk)
-                if content:
-                    answer_chunks.append(content)
-                    # 实时输出到控制台
-                    print(content, end="", flush=True)
-
-            # 输出换行
-            print()
-
-            # 合并所有片段
-            answer = "".join(answer_chunks).strip()
-            logger.info(f"LLM 流式输出完成，答案长度：{len(answer)}")
+            logger.info(f"开始调用 LLM...")
+            answer = chat.invoke(messages).content.strip()
+            logger.info(f"LLM 输出完成，答案长度：{len(answer)}")
 
             # 3. 构建结果
             result = {"answer": answer, "ai_generated": True}
