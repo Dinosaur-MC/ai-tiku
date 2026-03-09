@@ -71,6 +71,7 @@ class QueryAgent:
             logger.info(f"开始调用 LLM...")
             answer = chat.invoke(messages).content.strip()
             logger.info(f"LLM 输出完成，答案长度：{len(answer)}")
+            logger.debug(f"答案内容：{answer[:50]}...")
 
             # 3. 构建结果
             result = {"answer": answer, "ai_generated": True}

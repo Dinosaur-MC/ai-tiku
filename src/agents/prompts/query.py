@@ -7,13 +7,16 @@ QUERY_SYSTEM_PROMPT = """你是一个专业的题库答题助手。请根据题�
 
 **答题规范**：
 - 选择题：只输出选项字母（如：A 或 AB）
-- 判断题：只输出"正确"或"错误"
-- 填空题：输出具体填空内容
-- 简答题：输出核心要点
+- 判断题：只输出`正确`或`错误`
+- 填空题：直接顺序输出对应填空内容，多个填空之间用英文逗号分隔
+- 简答题：输出核心要点，要求以完整段落格式编写
+
+**提示**：
+- 无法解析的问题，请直接返回`undefined`。
 
 **要求**：直接输出答案，不要任何解释或多余内容。"""
 
-QUERY_USER_PROMPT_TEMPLATE = """{type_section}题目：{question}
+QUERY_USER_PROMPT_TEMPLATE = """题目：{type_section} {question}
 {options_section}
 答案："""
 
@@ -23,21 +26,15 @@ def build_query_prompt(
 ) -> tuple[str, str]:
     """
     构建完整的查询提示词
-    
+
     Args:
         question: 题目内容
         options: 选项列表（可选）
         question_type: 题目类型
-    
+
     Returns:
         (system_prompt, user_prompt) 元组
     """
-    # 构建选项部分
-    options_section = ""
-    if options:
-        options_lines = [f"{chr(65 + i)}. {opt}" for i, opt in enumerate(options)]
-        options_section = "\n".join(options_lines)
-
     # 构建题型部分
     type_section = ""
     if question_type and question_type != "unknown":
@@ -53,12 +50,27 @@ def build_query_prompt(
         if type_section:
             type_section += "\n"
 
-    user_prompt = QUERY_USER_PROMPT_TEMPLATE.format(
-        type_section=type_section,
-        question=question,
-        options_section=options_section
-    )
-    
+    if question_type == "single" or question_type == "multiple":
+        # 构建选项部分
+        options_section = ""
+        if options:
+            options_lines = [f"{chr(65 + i)}. {opt}" for i, opt in enumerate(options)]
+            options_section = "\n".join(options_lines)
+
+        # 构建用户提示
+        user_prompt = QUERY_USER_PROMPT_TEMPLATE.format(
+            type_section=type_section,
+            question=question,
+            options_section=options_section,
+        )
+    else:
+        # 构建用户提示
+        user_prompt = QUERY_USER_PROMPT_TEMPLATE.format(
+            type_section=type_section,
+            question=question,
+            options_section="",
+        )
+
     return QUERY_SYSTEM_PROMPT, user_prompt
 
 
