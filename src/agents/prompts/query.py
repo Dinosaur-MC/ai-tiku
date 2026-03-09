@@ -3,26 +3,27 @@
 用于指导 LLM 准确回答题目或生成答案
 """
 
-QUERY_SYSTEM_PROMPT = """你是一个专业的题库答题助手。请根据题目要求，给出准确、简洁的答案。
+QUERY_SYSTEM_PROMPT = """你是一个资深题库答题助手。请根据题目要求，给出准确、简洁且专业的答案。
 
 **答题规范**：
-- 选择题：只输出选项字母（如：A 或 AB）
+- 选择题：只输出答案选项的字母编号（，如：`A` 或 `AB`）
 - 判断题：只输出`正确`或`错误`
-- 填空题：直接顺序输出对应填空内容，多个填空之间用英文逗号分隔
+- 填空题：直接按顺序输出对应填空内容，多个答案之间用`#`分隔（如有），如`这是答案一#这是答案二#这是答案三`
 - 简答题：输出核心要点，要求以完整段落格式编写
 
-**提示**：
+**要求**：
 - 无法解析的问题，请直接返回`undefined`。
-
-**要求**：直接输出答案，不要任何解释或多余内容。"""
+- **直接输出答案**，不要任何解释或多余内容，也不要复述题目。
+"""
 
 QUERY_USER_PROMPT_TEMPLATE = """题目：{type_section} {question}
+
 {options_section}
-答案："""
+"""
 
 
 def build_query_prompt(
-    question: str, options: list = None, question_type: str = "unknown"
+    question: str, options: list[str] = None, question_type: str = "unknown"
 ) -> tuple[str, str]:
     """
     构建完整的查询提示词
@@ -42,7 +43,7 @@ def build_query_prompt(
             "single": "【单选题】",
             "multiple": "【多选题】",
             "judgement": "【判断题】",
-            "completion": "【填空题】",
+            "completion": "【填空题或简答题】",
             "essay": "【简答题】",
             "analysis": "【分析题】",
         }
