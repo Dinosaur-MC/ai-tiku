@@ -285,5 +285,7 @@ Temporary Items
 .apdisk
 
 .temp/
-data/
-src/test/
+data/*
+!data/README.md
+src/test/*
+!src/test/README.md
