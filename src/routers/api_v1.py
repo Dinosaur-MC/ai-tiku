@@ -19,10 +19,14 @@ from schemas.v1 import (
 from services.vector_search import vector_search
 from services.ai_service import ai_service
 from db import db
+from models import ApiToken
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["API v1"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["API v1"],
+)
 
 
 @router.get("/query", response_model=QueryResponse, summary="查题接口 (v1)")
@@ -146,7 +150,7 @@ async def query_question(
 
 
 @router.get("/info", response_model=InfoResponse, summary="题库信息获取接口 (v1)")
-async def get_info(token_info=Depends(verify_token)):
+async def get_info(token_info: ApiToken = Depends(verify_token)):
     """
     获取当前 token 的剩余调用次数、总使用次数及成功次数 - v1 版本
     """

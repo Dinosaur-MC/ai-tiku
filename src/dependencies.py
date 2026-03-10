@@ -7,10 +7,12 @@ from fastapi import Depends, HTTPException, status
 from db import db
 import logging
 
+from models import ApiToken
+
 logger = logging.getLogger(__name__)
 
 
-def verify_token(token: str) -> dict:
+def verify_token(token: str) -> ApiToken:
     """
     验证 API Token
 

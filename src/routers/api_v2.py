@@ -4,7 +4,6 @@ API v2 版本路由定义
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Body
-from typing import List, Optional
 import logging
 from datetime import datetime, timezone
 
@@ -23,7 +22,10 @@ from db import db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v2", tags=["API v2"])
+router = APIRouter(
+    prefix="/api/v2",
+    tags=["API v2"],
+)
 
 
 @router.post("/query", response_model=QueryResponse, summary="查题接口 (v2)")

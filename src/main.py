@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="AI-Tiku API",
     description="AI 题库答题服务系统，提供查题及题库信息查询功能",
-    version="2.0.0",  # 更新版本号
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
     debug=True,
 )
 
@@ -74,8 +74,7 @@ app.add_middleware(
 
 
 # ========== 导入并注册各版本 API 路由 ==========
-from routers.api_v1 import router as api_v1_router
-from routers.api_v2 import router as api_v2_router
+from routers import api_v1_router, api_v2_router
 
 # 注册 v1 版本（保持向后兼容）
 app.include_router(api_v1_router)
@@ -113,18 +112,6 @@ async def favicon():
         return FileResponse(favicon_path)
     else:
         return Response(status_code=404)
-
-
-# ========== API 文档入口 ==========
-@app.get("/docs", tags=["Documentation"], summary="API 文档导航")
-async def documentation_navigation():
-    """
-    API 文档导航页面
-
-    提供所有版本文档的访问入口
-    """
-    docs_path = Path(__file__).parent / "web" / "docs_index.html"
-    return FileResponse(docs_path)
 
 
 def main():
