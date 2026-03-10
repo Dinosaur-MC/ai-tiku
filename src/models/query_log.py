@@ -2,9 +2,9 @@
 Query Log 模型
 """
 
-from . import BaseModel
+from typing import Optional, TYPE_CHECKING
 from sqlmodel import Field, Relationship
-from typing import TYPE_CHECKING, Optional
+from . import BaseModel
 
 if TYPE_CHECKING:
     from .token import ApiToken

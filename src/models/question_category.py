@@ -2,9 +2,9 @@
 Question-Category 关联模型
 """
 
-from . import BaseModel
 from sqlmodel import Field, Relationship
 from typing import TYPE_CHECKING
+from . import BaseModel
 
 if TYPE_CHECKING:
     from .question import Question
