@@ -216,7 +216,7 @@
             <mdui-card class="search-card">
                 <div style="margin-bottom: 20px;">
                     <mdui-text-field label="Token" variant="outlined" id="tokenInput" placeholder="请输入您的 Token"
-                        value="test123456"></mdui-text-field>
+                        value="admin_token_123"></mdui-text-field>
                 </div>
 
                 <div style="margin-bottom: 20px;">
@@ -346,7 +346,7 @@
                     params.append('options', options);
                 }
 
-                const response = await fetch(`/api/query?${params.toString()}`);
+                const response = await fetch(`/api/v1/query?${params.toString()}`);
                 const data = await response.json();
 
                 currentResult = data;
@@ -377,7 +377,7 @@
             hideError();
 
             try {
-                const response = await fetch(`/api/info?token=${encodeURIComponent(token)}`);
+                const response = await fetch(`/api/v1/info?token=${encodeURIComponent(token)}`);
                 const data = await response.json();
 
                 currentResult = data;

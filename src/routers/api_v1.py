@@ -1,104 +1,33 @@
-from fastapi import (
-    APIRouter,
-    FastAPI,
-    status,
-    HTTPException,
-    Depends,
-    Query,
+"""
+API v1 版本路由定义
+保持与现有 API 完全兼容
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import Optional
+import logging
+
+from dependencies import verify_token
+from schemas.v1 import (
+    QueryRequest,
+    QueryResponse,
+    SingleResultData,
+    MultiResultData,
+    MultiResultItem,
+    InfoResponse,
 )
-from pydantic import BaseModel, Field
-from typing import Optional, List, Union, Dict
-from db import db
 from services.vector_search import vector_search
 from services.ai_service import ai_service
-import logging
+from db import db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1", tags=["API v1"])
 
 
-# 请求/响应模型
-class QueryRequest(BaseModel):
-    """查询请求模型"""
-
-    title: Optional[str] = Field(None, description="题目内容（与 q、question 三选一）")
-    q: Optional[str] = Field(None, description="题目内容（与 title、question 三选一）")
-    question: Optional[str] = Field(None, description="题目内容（与 title、q 三选一）")
-    options: Optional[str] = Field(None, description="选项内容，多个用换行符分隔")
-    type: Optional[str] = Field("unknown", description="题目类型")
-    more: Optional[bool] = Field(False, description="是否返回多个结果（已禁用）")
-
-    def get_question_text(self) -> str:
-        """获取题目文本（优先级：title > q > question）"""
-        return self.title or self.q or self.question or ""
-
-    def get_options_list(self) -> Optional[List[str]]:
-        """解析选项列表"""
-        if not self.options:
-            return None
-        return [opt.strip() for opt in self.options.split("\n") if opt.strip()]
-
-
-class SingleResultData(BaseModel):
-    """单条结果数据模型"""
-
-    question: str
-    answer: str
-    times: int
-    ai: bool = False
-
-
-class MultiResultItem(BaseModel):
-    """多条结果中的单项"""
-
-    question: str
-    answer: str
-    ai: bool = False
-
-
-class MultiResultData(BaseModel):
-    """多条结果数据模型"""
-
-    results: List[MultiResultItem]
-    times: int
-
-
-class QueryResponse(BaseModel):
-    """查询响应模型"""
-
-    code: int = Field(1, description="1 表示有答案，0 表示无答案")
-    message: str = "请求成功"
-    data: Union[SingleResultData, MultiResultData]
-
-
-class InfoResponse(BaseModel):
-    """信息响应模型"""
-
-    code: int = Field(1, description="1 表示成功，0 表示失败")
-    message: str = "请求成功"
-    data: Dict[str, int]
-
-
-def verify_token(token: str = Query(..., description="用户凭证")):
-    """验证 token"""
-    token_info = db.get_token_by_value(token)
-    if not token_info:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的 token，请在题库个人中心获取有效 token",
-        )
-    if token_info.remaining_queries <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Token 配额已用完，请充值或联系管理员",
-        )
-    return token_info
-
-
-@router.get("/query", response_model=QueryResponse, summary="查题接口")
+@router.get("/query", response_model=QueryResponse, summary="查题接口 (v1)")
 async def query_question(
-    token_info: dict = Depends(verify_token),
+    token_info=Depends(verify_token),
     title: Optional[str] = Query(None, description="题目内容"),
     q: Optional[str] = Query(None, description="题目内容"),
     question: Optional[str] = Query(None, description="题目内容"),
@@ -108,7 +37,7 @@ async def query_question(
     force_ai: Optional[bool] = Query(False, description="强制使用 AI 模型回答"),
 ):
     """
-    查题接口 - 根据题目内容搜索答案
+    查题接口 - 根据题目内容搜索答案 - v1 版本
 
     **参数说明**：
     - `title`、`q`、`question` 三个字段至少提供一个，最终只会采用其中一个（优先级：`title` > `q` > `question`）
@@ -130,9 +59,9 @@ async def query_question(
 
     try:
         # 执行查询
-        # 1. 首先尝试向量相似度搜索（除非强制使用 AI）
         result = None
 
+        # 1. 首先尝试向量相似度搜索（除非强制使用 AI）
         if not force_ai:
             similar_results = vector_search.search_similar(query_text, k=5)
 
@@ -189,7 +118,7 @@ async def query_question(
                     times=remaining,
                     ai=False,
                 )
-                return QueryResponse(code=0, message="请求失败", data=response_data)
+            return QueryResponse(code=0, message="请求失败", data=response_data)
         else:
             # 多条结果模式（保留兼容）
             results = result.get("results", [])
@@ -202,11 +131,11 @@ async def query_question(
                 for item in results
             ]
             response_data = MultiResultData(results=items, times=remaining)
-            return QueryResponse(
-                code=1 if results else 0,
-                message="请求成功" if results else "请求失败",
-                data=response_data,
-            )
+        return QueryResponse(
+            code=1 if results else 0,
+            message="请求成功" if results else "请求失败",
+            data=response_data,
+        )
 
     except Exception as e:
         logger.error(f"查询失败：{str(e)}", exc_info=True)
@@ -216,10 +145,10 @@ async def query_question(
         )
 
 
-@router.get("/info", response_model=InfoResponse, summary="题库信息获取接口")
-async def get_info(token_info: dict = Depends(verify_token)):
+@router.get("/info", response_model=InfoResponse, summary="题库信息获取接口 (v1)")
+async def get_info(token_info=Depends(verify_token)):
     """
-    获取当前 token 的剩余调用次数、总使用次数及成功次数
+    获取当前 token 的剩余调用次数、总使用次数及成功次数 - v1 版本
     """
     try:
         info_data = {
@@ -234,9 +163,3 @@ async def get_info(token_info: dict = Depends(verify_token)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取信息失败：{str(e)}",
         )
-
-
-# 注册路由到主应用
-def include_router(app: FastAPI):
-    """将路由注册到 FastAPI 应用"""
-    app.include_router(router, prefix="/api")

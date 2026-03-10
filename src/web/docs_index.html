@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Tiku API 文档中心</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 40px;
+        }
+        .version-card {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        .version-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102,126,234,0.2);
+        }
+        .version-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge-stable {
+            background: #d4edda;
+            color: #155724;
+        }
+        .badge-latest {
+            background: #cce5ff;
+            color: #004085;
+        }
+        .api-links {
+            margin-top: 15px;
+        }
+        .api-links a {
+            display: inline-block;
+            margin-right: 15px;
+            color: #667eea;
+            text-decoration: none;
+            padding: 8px 16px;
+            border: 1px solid #667eea;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .api-links a:hover {
+            background: #667eea;
+            color: white;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 15px;
+        }
+        .feature-list li {
+            padding: 5px 0;
+            color: #555;
+        }
+        .feature-list li:before {
+            content: "✓ ";
+            color: #28a745;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 AI-Tiku API 文档中心</h1>
+        <p class="subtitle">选择您要查看的 API版本文档</p>
+        
+        <!-- V1 版本 -->
+        <div class="version-card">
+            <h2>
+                API Version 1
+                <span class="version-badge badge-stable">稳定版</span>
+            </h2>
+            <p>当前稳定的生产版本，保持向后兼容。</p>
+            <ul class="feature-list">
+                <li>GET /api/v1/query- 查题接口</li>
+                <li>GET /api/v1/info - 题库信息</li>
+            </ul>
+            <div class="api-links">
+                <a href="/docs/v1" target="_blank">📖 Swagger 文档</a>
+                <a href="/redoc/v1" target="_blank">📄 ReDoc 文档</a>
+            </div>
+        </div>
+        
+        <!-- V2 版本 -->
+        <div class="version-card">
+            <h2>
+                API Version 2
+                <span class="version-badge badge-latest">最新版</span>
+            </h2>
+            <p>全新设计的改进版本，提供更规范的 API 接口。</p>
+            <ul class="feature-list">
+                <li>POST /api/v2/query- 查题接口（改进版）</li>
+                <li>GET /api/v2/info - 题库信息（改进版）</li>
+                <li>支持搜索模式选择（精确/模糊/AI-only）</li>
+                <li>返回置信度和详细使用统计</li>
+            </ul>
+            <div class="api-links">
+                <a href="/docs/v2" target="_blank">📖 Swagger 文档</a>
+                <a href="/redoc/v2" target="_blank">📄 ReDoc 文档</a>
+            </div>
+        </div>
+        
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
+        
+        <p style="color: #666; font-size: 14px;">
+            💡 <strong>提示：</strong>推荐使用 v2 版本获取更好的体验和功能。v1 版本将继续维护以确保向后兼容。
+        </p>
+    </div>
+</body>
+</html>
