@@ -1,117 +1,226 @@
 """
-题目查询提示词模板 - 优化版
+题目查询提示词模板
 用于指导 LLM 准确回答题目或生成答案
 """
 
-QUERY_SYSTEM_PROMPT = """你是一个资深题库答题助手。请根据题目要求，给出准确、简洁且专业的答案。
+from typing import Dict, Optional
 
-**答题规范**：
-- 选择题：只输出答案选项的字母编号（，如：`A` 或 `AB`）
-- 判断题：只输出`正确`或`错误`
-- 填空题：直接按顺序输出对应填空内容，多个答案之间用`#`分隔（如有），如`这是答案一#这是答案二#这是答案三`
-- 简答题：输出核心要点，要求以完整段落格式编写
+# QUERY_OUTPUT_CHECK_REGEX
+# Regex patterns to validate the output format based on question type
+QUERY_OUTPUT_CHECK_REGEX: Dict[str, str] = {
+    "single": r"^[A-Z]$",  # Exactly one uppercase letter
+    "multiple": r"^[A-Z]+$",  # One or more uppercase letters (e.g., A, AB, ABC)
+    "judgement": r"^[TF]$",  # Exactly 'T' or 'F'
+    "completion": r"^[^：。？\s][^：。？]*$",  # No colon, period, or sentence-ending punctuation at start
+    "essay": r"^.{50,}$",  # At least 50 characters for essay type
+}
 
-**要求**：
-- 无法解析的问题，请直接返回`undefined`。
-- **直接输出答案**，不要任何解释或多余内容，也不要复述题目。
+
+# TYPE_DETECTION_PROMPT_TEMPLATE
+TYPE_DETECTION_PROMPT_TEMPLATE = """
+You are an AI classifier. Detect the question type based on the provided text and options.
+Available types: 'single', 'multiple', 'judgement', 'completion', 'essay'.
+
+Rules:
+1. If options exist (A/B/C/D or 1/2/3/4) and only one answer is expected -> 'single'.
+2. If options exist and multiple answers are expected -> 'multiple'.
+3. If the question asks for True/False or Correct/Incorrect -> 'judgement'.
+4. If the question contains blanks (____) to fill -> 'completion'.
+5. If the question requires a long descriptive answer, analysis, or discussion -> 'essay'.
+   Note: Sometimes essay questions are labeled as completion. If the expected answer length is long, classify as 'essay'.
+
+Output ONLY the type name (lowercase).
+
+Examples:
+User: 
+Title:  Python 是什么类型的语言？
+Options: A. 编译型 B. 解释型 C. 汇编 D. 机器
+Answer:
+single
+
+User: 
+Title:  下列说法正确的是？
+Options: A. 地球是平的 B. 地球是圆的
+Answer:
+single
+
+User: 
+Title:  请简述人工智能的发展历程。
+Options: None
+Answer:
+essay
+
+User: 
+Title:  水的化学式是____。
+Options: None
+Answer:
+completion
+
+Current Task:
+Title: {title}
+Options: {options}
+Answer:
 """
 
-QUERY_USER_PROMPT_TEMPLATE = """题目：{type_section} {question}
+# QUERY_SINGLE_PROMPT_TEMPLATE
+QUERY_SINGLE_PROMPT_TEMPLATE = """
+You are an AI exam assistant. Solve the following single-choice question.
+Rules:
+1. Analyze the question and options carefully.
+2. Output ONLY the option letter (e.g., A, B, C, D).
+3. Do not output any explanation or extra text.
+4. Language: Simplified Chinese for reasoning, but Output MUST be English letter.
 
-{options_section}
+Example:
+Title: 1 + 1 等于多少？
+Options: A. 1 B. 2 C. 3 D. 4
+Answer:
+B
+
+Current Task:
+Title: {title}
+Options: {options}
+Answer:
+"""
+
+# QUERY_MULTIPLE_PROMPT_TEMPLATE
+QUERY_MULTIPLE_PROMPT_TEMPLATE = """
+You are an AI exam assistant. Solve the following multiple-choice question.
+Rules:
+1. Analyze the question and options carefully.
+2. Select ALL correct options.
+3. Output ONLY the option letters concatenated (e.g., AB, ABC, ACD).
+4. Do not output any explanation or extra text.
+5. Language: Simplified Chinese for reasoning, but Output MUST be English letters.
+
+Example:
+Title: 以下哪些是编程语言？
+Options: A. Python B. HTML C. Java D. CSS
+Answer:
+AC
+
+Current Task:
+Title: {title}
+Options: {options}
+Answer:
+"""
+
+# QUERY_JUDGEMENT_PROMPT_TEMPLATE
+QUERY_JUDGEMENT_PROMPT_TEMPLATE = """
+You are an AI exam assistant. Solve the following judgement question.
+Rules:
+1. Determine if the statement is True or False.
+2. Output ONLY 'T' for True or 'F' for False.
+3. Do not output any explanation or extra text.
+
+Example:
+Question: 地球是太阳系中最大的行星。
+Answer:
+F
+
+Current Task:
+Question: {title}
+Answer:
+"""
+
+# QUERY_COMPLETION_PROMPT_TEMPLATE
+QUERY_COMPLETION_PROMPT_TEMPLATE = """
+You are an AI exam assistant. Solve the following fill-in-the-blank question.
+Rules:
+1. Output ONLY the exact content that should fill each blank and no extra content.
+2. DO NOT include the question text, prefixes, suffixes or explanations.
+3. DO NOT output phrases like "答案是", "填空:", "答案:", etc.
+4. If there are multiple blanks, separate answers with '#' ONLY.
+5. Prefer using terminologies and scientific terms in your answer.
+
+Example 1:
+Question: 中国的首都是____，简称____。
+Answer:
+北京#京
+
+Example 2:
+Question: 冯·诺依曼体系结构主要包括以下几种部件____、____、____、____、____。
+Answer:
+运算器#控制器#存储器#输入设备#输出设备
+
+Current Task:
+Question: {title}
+Answer:
+"""
+
+# QUERY_ESSAY_PROMPT_TEMPLATE
+QUERY_ESSAY_PROMPT_TEMPLATE = """
+You are an AI exam assistant. Write an answer for the following essay question.
+Rules:
+1. Provide a structured, paragraph-based reply (1~3 paragraphs).
+2. The answer must be detailed and exceed 50 Chinese characters.
+3. Do not output any labels like 'Answer:', just the content.
+4. Language: Simplified Chinese.
+
+Example:
+Question: 请简述牛顿第一定律。
+Answer:
+牛顿第一定律，又称惯性定律，表明任何物体都要保持匀速直线运动或静止状态，直到外力迫使它改变运动状态为止。这一定律揭示了力和运动的关系，指出力不是维持物体运动的原因，而是改变物体运动状态的原因。惯性是物体固有的属性，质量是惯性大小的量度。
+
+Current Task:
+Question: {title}
+Answer:
+"""
+
+# QUERY_CORRECTION_PROMPT_TEMPLATE
+QUERY_CORRECTION_PROMPT_TEMPLATE = """
+You are an AI format corrector. Your previous output failed the format validation.
+Question Type: {question_type}
+Required Format: {format_requirement}
+Your Previous Output: {previous_output}
+
+Task:
+1. Keep the original answer content as much as possible.
+2. Reformat the output to strictly match the required format.
+3. Output ONLY the corrected answer.
+
+Examples:
+Type: single
+Required: ^[A-Z]$
+Previous: 答案是 A
+Corrected: A
+
+Type: completion
+Required: ^.+$ (use # for multiple)
+Previous: 第一个空填北京，第二个空填京
+Corrected: 北京#京
+
+Current Task:
+Type: {question_type}
+Required: {format_requirement}
+Previous: {previous_output}
+Corrected:
 """
 
 
-def build_query_prompt(
-    question: str, options: list[str] = None, question_type: str = "unknown"
-) -> tuple[str, str]:
-    """
-    构建完整的查询提示词
-
-    Args:
-        question: 题目内容
-        options: 选项列表（可选）
-        question_type: 题目类型
-
-    Returns:
-        (system_prompt, user_prompt) 元组
-    """
-    # 构建题型部分
-    type_section = ""
-    if question_type and question_type != "unknown":
-        type_map = {
-            "single": "【单选题】",
-            "multiple": "【多选题】",
-            "judgement": "【判断题】",
-            "completion": "【填空题或简答题】",
-            "essay": "【简答题】",
-            "analysis": "【分析题】",
-        }
-        type_section = type_map.get(question_type, "")
-        if type_section:
-            type_section += "\n"
-
-    if question_type == "single" or question_type == "multiple":
-        # 构建选项部分
-        options_section = ""
-        if options:
-            options_lines = [f"{chr(65 + i)}. {opt}" for i, opt in enumerate(options)]
-            options_section = "\n".join(options_lines)
-
-        # 构建用户提示
-        user_prompt = QUERY_USER_PROMPT_TEMPLATE.format(
-            type_section=type_section,
-            question=question,
-            options_section=options_section,
-        )
-    else:
-        # 构建用户提示
-        user_prompt = QUERY_USER_PROMPT_TEMPLATE.format(
-            type_section=type_section,
-            question=question,
-            options_section="",
-        )
-
-    return QUERY_SYSTEM_PROMPT, user_prompt
+def build_type_detection_prompt(title: str, options: Optional[str]) -> str:
+    """Builds the prompt for question type detection."""
+    return TYPE_DETECTION_PROMPT_TEMPLATE.format(title=title, options=options)
 
 
-# AI 生成答案提示词
-AI_GENERATE_PROMPT = """基于以下题目信息，生成一个准确的答案。
-
-题目：{question}
-
-{options_section}
-
-参考答案：{reference_answer}
-
-请确保生成的答案：
-1. 准确无误
-2. 简洁明了
-3. 符合题型要求
-4. 与参考答案保持一致（如有）
-
-直接输出答案即可。"""
+def build_query_prompt(question_type: str, title: str, options: Optional[str]) -> str:
+    """Builds the prompt for answering the question based on type."""
+    templates = {
+        "single": QUERY_SINGLE_PROMPT_TEMPLATE,
+        "multiple": QUERY_MULTIPLE_PROMPT_TEMPLATE,
+        "judgement": QUERY_JUDGEMENT_PROMPT_TEMPLATE,
+        "completion": QUERY_COMPLETION_PROMPT_TEMPLATE,
+        "essay": QUERY_ESSAY_PROMPT_TEMPLATE,
+    }
+    template = templates.get(question_type, QUERY_COMPLETION_PROMPT_TEMPLATE)
+    return template.format(title=title, options=options)
 
 
-# 多轮对话查询提示词
-CONVERSATIONAL_QUERY_PROMPT = """结合对话历史和相关资料，回答用户的问题。
-
-对话历史：
-{history}
-
-相关资料：
-{context}
-
-用户问题：{question}
-
-请基于以上信息，给出准确、完整的回答。如果资料中没有相关信息，请如实告知。"""
-
-
-# 带置信度的答案生成提示词（简化版）
-CONFIDENCE_ANSWER_PROMPT = """题目：{question}
-{options_section}
-答案：{answer}
-
-请用 JSON 格式返回：
-{{"confidence": 0.85, "reasoning": "一句话理由"}}
-"""
+def build_correction_prompt(question_type: str, previous_output: str) -> str:
+    """Builds the prompt for correcting format errors."""
+    req_regex = QUERY_OUTPUT_CHECK_REGEX.get(question_type, r".+")
+    return QUERY_CORRECTION_PROMPT_TEMPLATE.format(
+        question_type=question_type,
+        format_requirement=req_regex,
+        previous_output=previous_output,
+    )

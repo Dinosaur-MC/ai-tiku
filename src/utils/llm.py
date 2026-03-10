@@ -52,7 +52,10 @@ embedder = OllamaEmbeddings(model=config.embedding_model, base_url=config.base_u
 
 # 创建 Completion 模型
 completion = OllamaLLM(
-    model=config.model_name, temperature=config.temperature, base_url=config.base_url
+    model=config.model_name,
+    temperature=config.temperature,
+    base_url=config.base_url,
+    reasoning=False,
 )
 
 # 初始化 Chat 模型

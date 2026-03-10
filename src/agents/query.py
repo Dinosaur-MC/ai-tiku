@@ -1,25 +1,21 @@
 """
-题目查询 Agent - 简化版（基于 LangChain + Pydantic）
+题目查询 Agent - 简化版（基于 LangChain ）
 负责回答题目并生成答案
 """
 
 from typing import List, Dict, Optional
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
+import re
+from agents.prompts.query import (
+    QUERY_OUTPUT_CHECK_REGEX,
+    build_type_detection_prompt,
+    build_query_prompt,
+    build_correction_prompt,
+)
+from utils.llm import completion
+from utils.string_util import common_prefix
 import logging
 
-from utils.llm import chat
-from agents.prompts.query import build_query_prompt, CONFIDENCE_ANSWER_PROMPT
-
 logger = logging.getLogger(__name__)
-
-
-class ConfidenceResult(BaseModel):
-    """置信度评估结果模型"""
-
-    confidence: float = Field(description="置信度，0.0-1.0 之间的浮点数")
-    reasoning: str = Field(description="简要说明答案的依据")
 
 
 class QueryAgent:
@@ -27,17 +23,13 @@ class QueryAgent:
 
     def __init__(self):
         """初始化题目查询 Agent"""
-        self.query_history = []
-        # 初始化 Pydantic 输出解析器
-        self.confidence_parser = PydanticOutputParser(pydantic_object=ConfidenceResult)
-        logger.info("QueryAgent 初始化完成，Pydantic 解析器已初始化")
+        pass
 
     def answer(
         self,
-        question: str,
-        options: List[str] = None,
+        title: str,
+        options: Optional[List[str]] = None,
         question_type: str = "unknown",
-        return_confidence: bool = False,
     ) -> Dict:
         """
         回答题目
@@ -46,124 +38,97 @@ class QueryAgent:
             question: 题目内容
             options: 选项列表
             question_type: 题目类型
-            return_confidence: 是否返回置信度
 
         Returns:
-            包含答案的字典
+            答案
         """
-        logger.debug(
-            f"收到查询请求：question='{question[:50]}...', type={question_type}, confidence={return_confidence}"
-        )
+
+        logger.info(f"收到查询请求：question='{title[:50]}...', type={question_type}")
 
         try:
-            # 1. 构建提示词
-            system_prompt, user_prompt = build_query_prompt(
-                question, options, question_type
-            )
-            logger.debug(f"系统提示：{system_prompt[:80]}...")
-            logger.debug(f"用户提示：{user_prompt[:100]}...")
+            # 1. Type Detection
+            if question_type == "unknown" or not QUERY_OUTPUT_CHECK_REGEX.get(
+                question_type
+            ):
+                logger.debug("Detecting Question Type...")
+                detect_prompt = build_type_detection_prompt(title, options)
+                question_type = completion.invoke(detect_prompt)
+                question_type = question_type.strip().lower()
 
-            # 2. 调用 LLM
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt),
-            ]
-            logger.info(f"开始调用 LLM...")
-            answer = chat.invoke(messages).content.strip()
-            logger.info(f"LLM 输出完成，答案长度：{len(answer)}")
-            logger.debug(f"答案内容：{answer[:50]}...")
+                # Map potential variations to standard types
+                type_map = {
+                    "single choice": "single",
+                    "单选题": "single",
+                    "multiple choice": "multiple",
+                    "多选题": "multiple",
+                    "true/false": "judgement",
+                    "判断题": "judgement",
+                    "fill-in-the-blank": "completion",
+                    "填空题": "completion",
+                    "essay": "essay",
+                    "问答题": "essay",
+                }
+                for key, val in type_map.items():
+                    if key in question_type:
+                        question_type = val
+                        break
 
-            # 3. 构建结果
-            result = {"answer": answer, "ai_generated": True}
+                if question_type not in QUERY_OUTPUT_CHECK_REGEX:
+                    question_type = "essay"  # Default fallback
 
-            # 4. 可选：评估置信度
-            if return_confidence:
-                logger.debug("开始评估置信度...")
-                confidence_result = self._evaluate_confidence(question, options, answer)
-                result.update(confidence_result)
-                logger.info(
-                    f"置信度评估完成：confidence={confidence_result.get('confidence')}"
+                logger.debug(f"Detected Type: {question_type}")
+
+            # 2. Generate Answer
+            logger.debug("Generating Answer...")
+            query_prompt = build_query_prompt(question_type, title, options)
+            answer = completion.invoke(query_prompt).strip()
+            logger.debug(f"Raw Answer: {answer}")
+
+            if question_type == "completion":
+                new_title = title.strip()
+                prefix = common_prefix(answer, new_title)
+                while prefix:
+                    new_title = new_title.removeprefix(prefix).strip()
+                    answer = answer.removeprefix(prefix).strip()
+                    logger.debug(f"Removed Prefix: {prefix}")
+                    prefix = common_prefix(answer, new_title)
+                if answer.startswith((":", "：")):
+                    answer = answer[1:].strip()
+
+            # 3. Format Check
+            logger.debug("Checking Format...")
+            is_valid = self._check_output_format(answer, question_type)
+
+            if not is_valid:
+                logger.debug(
+                    f"Format Check Failed for type '{question_type}'. Triggering Correction..."
                 )
 
-            # 5. 记录历史
-            self.query_history.append(
-                {
-                    "question": question,
-                    "options": options,
-                    "type": question_type,
-                    "result": result,
-                }
-            )
-            logger.debug(f"查询已记录到历史，当前历史记录数：{len(self.query_history)}")
+                # 4. Correction Loop (Max 1 attempt)
+                correction_prompt = build_correction_prompt(question_type, answer)
+                corrected_answer = completion.invoke(correction_prompt).strip()
+                logger.debug(f"Corrected Answer: {corrected_answer}")
 
-            return result
+                # Final Check
+                if not self._check_output_format(corrected_answer, question_type):
+                    logger.warning(
+                        "Correction failed format check. Returning raw corrected output."
+                    )
+                logger.info(
+                    f"查询结果（{len(corrected_answer)}）：{corrected_answer[:50]}..."
+                )
+                return corrected_answer
+            else:
+                logger.info(f"查询结果（{len(answer)}）：{answer[:50]}...")
+                return answer
 
         except Exception as e:
             logger.error(f"查询失败：{str(e)}", exc_info=True)
             raise
 
-    def _evaluate_confidence(
-        self, question: str, options: List[str], answer: str
-    ) -> Dict:
-        """评估答案置信度（使用LangChain Pydantic 输出解析）"""
-        try:
-            # 构建置信度提示词
-            options_text = (
-                "\n".join([f"{chr(65 + i)}. {opt}" for i, opt in enumerate(options)])
-                if options
-                else ""
-            )
-            prompt = CONFIDENCE_ANSWER_PROMPT.format(
-                question=question, options_section=options_text, answer=answer
-            )
-
-            # 添加格式指令
-            format_instructions = self.confidence_parser.get_format_instructions()
-            full_prompt = f"{prompt}\n\n{format_instructions}"
-
-            messages = [
-                SystemMessage(
-                    content="请评估答案的置信度，严格按照指定格式返回 JSON。"
-                ),
-                HumanMessage(content=full_prompt),
-            ]
-
-            logger.debug(f"置信度评估提示：{prompt[:100]}...")
-
-            # 使用 stream 模式调用 LLM 并自动解析为 Pydantic 对象
-            logger.info(f"开始评估置信度（流式输出）...")
-            print("[置信度评估]: ", end="", flush=True)
-
-            response_chunks = []
-            for chunk in chat.stream(messages):
-                content = chunk.content if hasattr(chunk, "content") else str(chunk)
-                if content:
-                    response_chunks.append(content)
-                    # 实时输出
-                    print(content, end="", flush=True)
-
-            # 输出换行
-            print()
-
-            # 合并响应
-            response_content = "".join(response_chunks)
-            logger.debug(f"置信度评估原始返回：'{response_content}'")
-
-            # 使用解析器自动解析
-            confidence_result = self.confidence_parser.parse(response_content)
-
-            logger.info(f"置信度解析成功：confidence={confidence_result.confidence}")
-            return {
-                "confidence": confidence_result.confidence,
-                "reasoning": confidence_result.reasoning,
-            }
-
-        except Exception as e:
-            logger.error(f"置信度评估失败：{str(e)}", exc_info=True)
-            return {"confidence": 0.8, "reasoning": f"评估出错：{str(e)}"}
-
     def batch_answer(self, questions: List[Dict]) -> List[Dict]:
         """批量回答题目"""
+
         logger.info(f"开始批量处理 {len(questions)} 道题目")
         results = []
         for i, q in enumerate(questions, 1):
@@ -177,35 +142,19 @@ class QueryAgent:
         logger.info(f"批量处理完成，共 {len(results)} 道题")
         return results
 
-    def get_statistics(self) -> Dict:
-        """获取查询统计信息"""
-        if not self.query_history:
-            return {"total_queries": 0, "with_confidence": 0, "average_confidence": 0.0}
+    @staticmethod
+    def _check_output_format(answer: str, question_type: str) -> bool:
+        """Enhanced format checker with semantic validation for completion type"""
 
-        total = len(self.query_history)
-        with_confidence = sum(
-            1 for q in self.query_history if "confidence" in q["result"]
-        )
-        avg_confidence = sum(
-            q["result"].get("confidence", 0.0)
-            for q in self.query_history
-            if "confidence" in q["result"]
-        ) / max(with_confidence, 1)
+        pattern = QUERY_OUTPUT_CHECK_REGEX.get(question_type)
+        if not pattern:
+            return False
 
-        logger.debug(
-            f"统计信息：total={total}, with_confidence={with_confidence}, avg={avg_confidence:.2f}"
-        )
-        return {
-            "total_queries": total,
-            "with_confidence": with_confidence,
-            "average_confidence": avg_confidence,
-        }
+        # Basic regex check
+        if not re.match(pattern, answer.strip()):
+            return False
 
-    def clear_history(self):
-        """清空查询历史"""
-        count = len(self.query_history)
-        self.query_history = []
-        logger.info(f"已清空查询历史，共清除 {count} 条记录")
+        return True
 
 
 # 单例模式
