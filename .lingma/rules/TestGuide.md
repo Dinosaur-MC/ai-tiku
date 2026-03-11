@@ -1,3 +1,8 @@
+---
+trigger: glob
+glob: src/test/test_*.py
+---
+
 # 项目测试说明
 
 ## 测试代码限制

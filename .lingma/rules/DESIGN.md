@@ -1,6 +1,7 @@
 ---
-name: prototype of AI-Tiku Project
+trigger: model_decision
 description: AI-Tiku 项目原型设计与开发计划
+name: prototype of AI-Tiku Project
 labels: [prototype]
 assignees: [Dinosaur-MC@github.com]
 llm-accessibility: readonly
