@@ -12,7 +12,7 @@ from agents.prompts.query import (
     build_correction_prompt,
 )
 from utils.llm import completion
-from utils.string_util import common_prefix
+from utils.string_tool import common_prefix
 import logging
 
 logger = logging.getLogger(__name__)

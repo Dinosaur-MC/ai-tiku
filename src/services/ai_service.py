@@ -3,7 +3,7 @@ AI服务 - 基于 LangChain/LangGraph 统一组织和协调多个 AI Agent
 整合原 ai_responder 的所有功能
 """
 
-from typing import List, Dict, Optional
+from typing import List, Dict
 from agents.query import query_agent
 from agents.classification import classifier
 from agents.reviewer import reviewer
@@ -92,50 +92,50 @@ class AIService:
             "ai_generated": True,
         }
 
-    def full_process(
-        self, question: str, options: List[str] = None, question_type: str = "unknown"
-    ) -> Dict:
-        """
-        完整流程：分类 -> 回答 -> 复审
+    # def full_process(
+    #     self, question: str, options: List[str] = None, question_type: str = "unknown"
+    # ) -> Dict:
+    #     """
+    #     完整流程：分类 -> 回答 -> 复审
 
-        Args:
-            question: 题目内容
-            options: 选项列表
-            question_type: 题目类型
+    #     Args:
+    #         question: 题目内容
+    #         options: 选项列表
+    #         question_type: 题目类型
 
-        Returns:
-            包含所有处理结果的字典
-        """
-        # 1. 分类
-        categories = classifier.classify(question, options)
+    #     Returns:
+    #         包含所有处理结果的字典
+    #     """
+    #     # 1. 分类
+    #     categories = classifier.classify(question, options)
 
-        # 2. 回答
-        answer_result = self.query_agent.answer(
-            question=question, options=options, question_type=question_type
-        )
+    #     # 2. 回答
+    #     answer_result = self.query_agent.answer(
+    #         question=question, options=options, question_type=question_type
+    #     )
 
-        # 3. 复审
-        review_result = self.reviewer.review(
-            question=question,
-            answer=answer_result["answer"],
-            options=options,
-            question_type=question_type,
-        )
+    #     # 3. 复审
+    #     review_result = self.reviewer.review(
+    #         question=question,
+    #         answer=answer_result["answer"],
+    #         options=options,
+    #         question_type=question_type,
+    #     )
 
-        # 4. 整合结果
-        final_answer = review_result.get("corrected_answer") or answer_result["answer"]
+    #     # 4. 整合结果
+    #     final_answer = review_result.get("corrected_answer") or answer_result["answer"]
 
-        return {
-            "categories": categories,
-            "original_answer": answer_result["answer"],
-            "final_answer": final_answer,
-            "review_result": review_result,
-            "was_corrected": review_result.get("corrected_answer") is not None,
-            "statistics": {
-                "query_stats": self.query_agent.get_statistics(),
-                "review_stats": self.reviewer.get_review_statistics(),
-            },
-        }
+    #     return {
+    #         "categories": categories,
+    #         "original_answer": answer_result["answer"],
+    #         "final_answer": final_answer,
+    #         "review_result": review_result,
+    #         "was_corrected": review_result.get("corrected_answer") is not None,
+    #         "statistics": {
+    #             "query_stats": self.query_agent.get_statistics(),
+    #             "review_stats": self.reviewer.get_review_statistics(),
+    #         },
+    #     }
 
     def chat(self, query: str, use_history: bool = True) -> Dict:
         """
@@ -150,25 +150,25 @@ class AIService:
         """
         return self.rag_chat.chat(query, use_history)
 
-    def batch_process(self, questions: List[Dict]) -> List[Dict]:
-        """
-        批量处理题目
+    # def batch_process(self, questions: List[Dict]) -> List[Dict]:
+    #     """
+    #     批量处理题目
 
-        Args:
-            questions: 题目列表，每个包含 question、options、type 等字段
+    #     Args:
+    #         questions: 题目列表，每个包含 question、options、type 等字段
 
-        Returns:
-            处理结果列表
-        """
-        results = []
-        for q in questions:
-            result = self.full_process(
-                question=q["question"],
-                options=q.get("options"),
-                question_type=q.get("type", "unknown"),
-            )
-            results.append(result)
-        return results
+    #     Returns:
+    #         处理结果列表
+    #     """
+    #     results = []
+    #     for q in questions:
+    #         result = self.full_process(
+    #             question=q["question"],
+    #             options=q.get("options"),
+    #             question_type=q.get("type", "unknown"),
+    #         )
+    #         results.append(result)
+    #     return results
 
     def generate_answer(
         self, title: str, options: List[str] = None, question_type: str = "unknown"
