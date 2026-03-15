@@ -4,7 +4,7 @@
 
 from .base import BaseModel
 from .user import User, UserRole, UserStatus
-from .token import ApiToken, TokenStatus
+from .api_key import ApiKey, TokenStatus
 from .question import Question, QuestionType, ReviewStatus
 from .query_log import QueryLog
 from .category import Category
@@ -13,7 +13,7 @@ from .question_category import QuestionCategory
 __all__ = [
     "BaseModel",
     "User",
-    "ApiToken",
+    "ApiKey",
     "Question",
     "QueryLog",
     "Category",

@@ -4,9 +4,10 @@ API Token 模型
 
 from typing import Optional, TYPE_CHECKING
 from datetime import datetime, timezone
+import enum
 from sqlmodel import Field, Relationship, Column
 from sqlalchemy import Enum
-import enum
+from utils.access_token import generate_api_key
 from . import BaseModel
 
 if TYPE_CHECKING:
@@ -19,16 +20,16 @@ class TokenStatus(str, enum.Enum):
     ACTIVE = "active"
     DISABLED = "disabled"
     EXHAUSTED = "exhausted"
-    OUTDATED = "outdated"
+    EXPIRED = "expired"
 
 
-class ApiToken(BaseModel, table=True):
+class ApiKey(BaseModel, table=True):
     """API 用户凭证表"""
 
-    __tablename__ = "api_tokens"
+    __tablename__ = "api_keys"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    token: str = Field(unique=True, index=True)
+    token: str = Field(unique=True, index=True, default_factory=generate_api_key)
     owner_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
     total_queries: int = Field(default=0)
     success_queries: int = Field(default=0)

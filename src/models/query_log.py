@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship
 from . import BaseModel
 
 if TYPE_CHECKING:
-    from .token import ApiToken
+    from .api_key import ApiKey
 
 
 class QueryLog(BaseModel, table=True):
@@ -16,9 +16,9 @@ class QueryLog(BaseModel, table=True):
     __tablename__ = "query_logs"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    token_id: int = Field(foreign_key="api_tokens.id", index=True)
+    token_id: int = Field(foreign_key="api_keys.id", index=True)
     query_text: str = Field()
     found: bool = Field(default=False)
 
     # 关联 token
-    token: Optional["ApiToken"] = Relationship(back_populates="query_logs")
+    token: Optional["ApiKey"] = Relationship(back_populates="query_logs")
