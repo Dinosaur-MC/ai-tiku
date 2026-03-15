@@ -292,6 +292,9 @@ def init_test_data():
             f"   ✓ 向量库统计：{stats['total_documents']} 道题目，索引大小：{stats['index_size']}"
         )
     except Exception as e:
+        import traceback
+
+        traceback.print_exc()
         print(f"   ✗ 向量化失败：{e}")
 
     # 6. 记录日志

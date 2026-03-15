@@ -18,7 +18,7 @@ import json
 from models import *
 
 # 获取项目根目录
-ROOT_DIR = Path(__file__).parent.parent
+ROOT_DIR = Path(__file__).parent.parent.parent
 
 DATA_DIR = ROOT_DIR / "data"
 
@@ -192,7 +192,7 @@ class VectorStore:
             # 保存 docstore 和 id_mapping
             docstore_path = self.index_path.with_suffix(".json")
             data = {
-                "docstore": self.docstore,
+                "docstore": {k: v.model_dump() for k, v in self.docstore.items()},
                 "id_mapping": self.id_mapping,
                 "next_internal_id": self.next_internal_id,
             }
