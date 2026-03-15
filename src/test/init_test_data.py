@@ -10,9 +10,8 @@ from pathlib import Path
 # 添加 src 到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from db import db, VectorStore
-from agents.rag_chat import rag_chat
-from models.user import User, UserRole
+from utils.dbc import db, VectorStore
+from models import *
 from sqlmodel import Session, select
 
 
@@ -32,7 +31,7 @@ def init_test_data():
 
     for username, password, email, role in test_users:
         try:
-            with Session(db.engine) as session:
+            with db.get_session() as session:
                 # 检查用户是否已存在
                 statement = select(User).where(User.username == username)
                 existing_user = session.exec(statement).first()
@@ -72,11 +71,19 @@ def init_test_data():
                         owner_id = owner.id
 
             # 检查 token 是否已存在
-            existing_token = db.get_token_by_value(token_str)
+            existing_token = db.read_one_by_condition(
+                ApiKey, ApiKey.owner_id == owner_id, ApiKey.token == token_str
+            )
             if existing_token:
                 print(f"   ⚠ Token '{token_str}' 已存在，跳过")
             else:
-                token_info = db.create_token(token_str, remaining, owner_id=owner_id)
+                token_info = db.create(
+                    ApiKey(
+                        token=token_str,
+                        owner_id=owner_id,
+                        remaining_queries=remaining,
+                    )
+                )
                 print(
                     f"   ✓ Token '{token_str}' 创建成功 (剩余次数：{token_info.remaining_queries}, 所有者：{owner_username or '无'})"
                 )
@@ -97,9 +104,9 @@ def init_test_data():
     category_ids = []
     for name, description in categories:
         try:
-            cat_id = db.create_category(name, description)
-            category_ids.append(cat_id)
-            print(f"   ✓ 分类 '{name}' 创建成功 (ID: {cat_id})")
+            cat = db.create(Category(name=name, description=description))
+            category_ids.append(cat.id)
+            print(f"   ✓ 分类 '{name}' 创建成功 (ID: {cat.id})")
         except Exception as e:
             print(f"   ✗ 创建失败：{e}")
 
@@ -107,170 +114,185 @@ def init_test_data():
     print("\n4. 添加示例题目到题库...")
     sample_questions = [
         {
-            "question": "中国梦的本质是什么？",
-            "answer": "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。",
+            "question_title": "中国梦的本质是什么？",
+            "answer_text": "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。",
             "category_id": 0,
             "is_ai_generated": False,
             "source": "政治理论题库",
-            "question_type": "single",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.SINGLE,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         {
-            "question": "马克思主义活的灵魂是？",
-            "answer": "具体问题具体分析",
+            "question_title": "马克思主义活的灵魂是？",
+            "answer_text": "具体问题具体分析",
             "category_id": 0,
             "is_ai_generated": False,
             "source": "政治理论题库",
-            "question_type": "single",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.SINGLE,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         {
-            "question": "我国根本的政治制度是？",
-            "answer": "人民代表大会制度",
+            "question_title": "我国根本的政治制度是？",
+            "answer_text": "人民代表大会制度",
             "category_id": 0,
             "is_ai_generated": False,
             "source": "政治理论题库",
-            "question_type": "single",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.SINGLE,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         {
-            "question": "抗日战争爆发于哪一年？",
-            "answer": "1937 年",
+            "question_title": "抗日战争爆发于哪一年？",
+            "answer_text": "1937 年",
             "category_id": 1,
             "is_ai_generated": False,
             "source": "历史文化题库",
-            "question_type": "single",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.SINGLE,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         {
-            "question": "光在真空中的传播速度是多少？",
-            "answer": "约 3×10^8 米/秒（299,792,458 米/秒）",
+            "question_title": "光在真空中的传播速度是多少？",
+            "answer_text": "约 3×10^8 米/秒（299,792,458 米/秒）",
             "category_id": 2,
             "is_ai_generated": False,
             "source": "科学技术题库",
-            "question_type": "single",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.SINGLE,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         {
-            "question": "我国的最高国家权力机关是？",
-            "answer": "全国人民代表大会",
+            "question_title": "我国的最高国家权力机关是？",
+            "answer_text": "全国人民代表大会",
             "category_id": 3,
             "is_ai_generated": False,
             "source": "法律法规题库",
-            "question_type": "single",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.SINGLE,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         {
-            "question": "新发展理念包括哪些内容？",
-            "answer": "创新、协调、绿色、开放、共享",
+            "question_title": "新发展理念包括哪些内容？",
+            "answer_text": "创新、协调、绿色、开放、共享",
             "category_id": 4,
             "is_ai_generated": False,
             "source": "经济社会题库",
-            "question_type": "multiple",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.MULTIPLE,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         {
-            "question": "教育的根本任务是？",
-            "answer": "立德树人",
+            "question_title": "教育的根本任务是？",
+            "answer_text": "立德树人",
             "category_id": 5,
             "is_ai_generated": False,
             "source": "教育心理题库",
-            "question_type": "single",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.SINGLE,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         # 新增带选项的选择题
         {
-            "question": "下列哪项不是马克思主义的基本原理？",
-            "answer": "A",
+            "question_title": "下列哪项不是马克思主义的基本原理？",
+            "answer_text": "A",
             "category_id": 0,
             "is_ai_generated": False,
             "source": "政治理论题库",
-            "question_type": "single",
-            "options": "A. 辩证唯物主义\nB. 历史唯物主义\nC. 唯心主义\nD. 科学社会主义",
-            "review_status": "approved",
+            "question_type": QuestionType.SINGLE,
+            "question_options": "A. 辩证唯物主义\nB. 历史唯物主义\nC. 唯心主义\nD. 科学社会主义",
+            "review_status": ReviewStatus.APPROVED,
         },
         {
-            "question": "以下哪些属于新发展理念？（多选）",
-            "answer": "A,B,C,D,E",
+            "question_title": "以下哪些属于新发展理念？（多选）",
+            "answer_text": "A,B,C,D,E",
             "category_id": 4,
             "is_ai_generated": False,
             "source": "经济社会题库",
-            "question_type": "multiple",
-            "options": "A. 创新\nB. 协调\nC. 绿色\nD. 开放\nE. 共享\nF. 合作",
-            "review_status": "approved",
+            "question_type": QuestionType.MULTIPLE,
+            "question_options": "A. 创新\nB. 协调\nC. 绿色\nD. 开放\nE. 共享\nF. 合作",
+            "review_status": ReviewStatus.APPROVED,
         },
         # 判断题
         {
-            "question": "中国共产党的初心和使命是为中国人民谋幸福，为中华民族谋复兴。",
-            "answer": "正确",
+            "question_title": "中国共产党的初心和使命是为中国人民谋幸福，为中华民族谋复兴。",
+            "answer_text": "正确",
             "category_id": 0,
             "is_ai_generated": False,
             "source": "政治理论题库",
-            "question_type": "judgement",
-            "options": None,
-            "review_status": "approved",
+            "question_type": QuestionType.JUDGEMENT,
+            "question_options": None,
+            "review_status": ReviewStatus.APPROVED,
         },
         # 填空题
         {
-            "question": "我国共有____个少数民族。",
-            "answer": "55",
+            "question_title": "我国共有____个少数民族。",
+            "answer_text": "55",
             "category_id": 1,
             "is_ai_generated": False,
             "source": "历史文化题库",
-            "question_type": "completion",
-            "options": None,
-            "review_status": "pending",
+            "question_type": QuestionType.COMPLETION,
+            "question_options": None,
+            "review_status": ReviewStatus.PENDING,
         },
     ]
 
+    question_objects = []
     question_ids = []
-    for q in sample_questions:
+    for i, q in enumerate(sample_questions):
         try:
-            q_id = db.add_question_v2(
-                question_title=q["question"],
-                answer_text=q["answer"],
+            # 创建题目对象
+            question_obj = Question(
+                question_title=q["question_title"],
+                answer_text=q["answer_text"],
                 question_type=q["question_type"],
-                question_options=q.get("options"),
+                question_options=q.get("question_options"),
                 is_ai_generated=q["is_ai_generated"],
                 source=q["source"],
                 review_status=q["review_status"],
             )
-            question_ids.append(q_id)
+
+            # 保存到数据库
+            created_question = db.create(question_obj)
+            question_objects.append(created_question)
+            question_ids.append(created_question.id)
 
             # 分配到对应分类
             if q["category_id"] < len(category_ids):
-                db.assign_category(q_id, category_ids[q["category_id"]])
+                db.create(
+                    QuestionCategory(
+                        question_id=created_question.id,
+                        category_id=category_ids[q["category_id"]],
+                    )
+                )
 
             print(
-                f"   ✓ 题目 '{q['question'][:20]}...' 添加成功 (ID: {q_id}, 类型：{q['question_type']})"
+                f"   ✓ 题目 '{q['question_title'][:20]}...' 添加成功 (ID: {created_question.id}, 类型：{q['question_type'].value})"
             )
         except Exception as e:
             print(f"   ✗ 添加失败：{e}")
 
-    # 5. 添加到向量库
+    # 5. 添加到向量库（使用新的 VectorStore API）
     print("\n5. 将题目添加到向量库...")
-    for i, q in enumerate(sample_questions):
-        try:
-            rag_chat.add_document(
-                question=q["question"],
-                answer=q["answer"],
-                metadata={
-                    "question_id": question_ids[i],
-                    "source": q["source"],
-                    "question_type": q["question_type"],
-                },
-            )
-            print(f"   ✓ 题目 '{q['question'][:20]}...' 已向量化")
-        except Exception as e:
-            print(f"   ✗ 向量化失败：{e}")
+    try:
+        # 创建全局向量库实例（category_id=0 表示不分类别）
+        vector_store = VectorStore(category_id=0, category_name="全部题目")
+
+        # 批量添加所有题目到向量库
+        internal_ids = vector_store.add_documents(question_objects)
+
+        print(f"   ✓ 成功向量化 {len(internal_ids)} 道题目")
+        print(f"   ✓ 向量库内部 ID 范围：{min(internal_ids)} - {max(internal_ids)}")
+
+        # 显示统计信息
+        vector_store.save_index()
+        stats = vector_store.get_stats()
+        print(
+            f"   ✓ 向量库统计：{stats['total_documents']} 道题目，索引大小：{stats['index_size']}"
+        )
+    except Exception as e:
+        print(f"   ✗ 向量化失败：{e}")
 
     # 6. 记录日志
     print("\n" + "=" * 60)
@@ -281,6 +303,7 @@ def init_test_data():
     print(f"  - Token 数量：{len(test_tokens)}")
     print(f"  - 分类数量：{len(categories)}")
     print(f"  - 题目数量：{len(sample_questions)}")
+    print(f"  - 向量化题目数：{len(question_ids)}")
     print(f"\n测试用户:")
     for username, password, _, role in test_users:
         print(f"  - {username}/{password} (角色：{role})")

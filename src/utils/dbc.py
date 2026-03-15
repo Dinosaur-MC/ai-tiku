@@ -123,19 +123,19 @@ class Database:
         with self.get_session() as session:
             return session.get(model, id)
 
-    def read_by_condition[T: SQLModel](self, model: type[T], **kwargs) -> List[T]:
+    def read_by_condition[T: SQLModel](self, model: type[T], *whereclauses) -> List[T]:
         """根据条件读取数据"""
 
         with self.get_session() as session:
-            return session.exec(select(model).where(**kwargs)).all()
+            return session.exec(select(model).where(*whereclauses)).all()
 
     def read_one_by_condition[T: SQLModel](
-        self, model: type[T], **kwargs
+        self, model: type[T], *whereclauses
     ) -> Optional[T]:
         """根据条件读取一行数据"""
 
         with self.get_session() as session:
-            return session.exec(select(model).where(**kwargs)).first()
+            return session.exec(select(model).where(*whereclauses)).first()
 
 
 class VectorStore:
