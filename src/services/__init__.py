@@ -6,12 +6,15 @@ Services 模块 - 提供核心业务服务（基于 LangChain/LangGraph）
 - ai_service: AI服务，统一组织和调用多个 AI Agent（整合了原 AIResponder 功能）
 """
 
-from services.vector_search import VectorSearch, vector_search
 from services.ai_service import AIService, ai_service
+from services.user_service import UserService, user_service
+from services.question_service import QuestionService, question_service
 
 __all__ = [
-    'VectorSearch',
-    'vector_search',
-    'AIService',
-    'ai_service',
+    "AIService",
+    "ai_service",
+    "UserService",
+    "user_service",
+    "QuestionService",
+    "question_service",
 ]

@@ -1,3 +1,9 @@
+"""
+用户认证服务
+
+创建用户，认证用户，创建API密钥
+"""
+
 from typing import Optional
 from datetime import timedelta
 
@@ -14,7 +20,7 @@ from utils.access_token import (
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
-class UserAuthService:
+class UserService:
     def register_user(
         self, username: str, password: str, email: Optional[str] = None
     ) -> User:
@@ -68,3 +74,6 @@ class UserAuthService:
         db_api_key = ApiKey(owner_id=user_id, remaining_queries=capacity)
         db.create(db_api_key)
         return db_api_key
+
+
+user_service = UserService()
