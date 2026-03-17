@@ -34,7 +34,9 @@ class ApiKey(BaseModel, table=True):
     total_queries: int = Field(default=0)
     success_queries: int = Field(default=0)
     remaining_queries: int = Field(default=1000)
-    status: str = Field(default=TokenStatus.ACTIVE, sa_column=Column(Enum(TokenStatus)))
+    status: TokenStatus = Field(
+        default=TokenStatus.ACTIVE, sa_column=Column(Enum(TokenStatus))
+    )
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # 关联查询日志

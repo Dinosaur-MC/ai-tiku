@@ -33,6 +33,8 @@ class User(BaseModel, table=True):
     username: str = Field(unique=True, index=True)
     password: str = Field()
     email: Optional[str] = Field(default=None, unique=True, index=True)
-    role: str = Field(default=UserRole.USER, sa_column=Column(Enum(UserRole)))
-    status: str = Field(default=UserStatus.ACTIVE, sa_column=Column(Enum(UserStatus)))
+    role: UserRole = Field(default=UserRole.USER, sa_column=Column(Enum(UserRole)))
+    status: UserStatus = Field(
+        default=UserStatus.ACTIVE, sa_column=Column(Enum(UserStatus))
+    )
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

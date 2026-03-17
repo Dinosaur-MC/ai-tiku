@@ -38,14 +38,14 @@ class Question(BaseModel, table=True):
     __tablename__ = "questions"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    question_type: str = Field(
+    question_type: QuestionType = Field(
         default=QuestionType.UNKNOWN, sa_column=Column(Enum(QuestionType))
     )
     question_title: str = Field(index=True)
     question_options: Optional[str] = Field(default=None)
     answer_text: str = Field()
     is_ai_generated: bool = Field(default=False)
-    review_status: str = Field(
+    review_status: ReviewStatus = Field(
         default=ReviewStatus.PENDING, sa_column=Column(Enum(ReviewStatus))
     )
     source: Optional[str] = Field(default=None)
