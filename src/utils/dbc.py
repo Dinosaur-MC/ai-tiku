@@ -271,6 +271,22 @@ class VectorStore:
 
         return internal_ids
 
+    def remove_documents(self, question_ids: List[int]) -> int:
+        """
+        从向量库中删除指定 ID 的文档
+
+        Args:
+            question_ids: 要删除的文档 ID 列表
+        """
+        if self.index is None or self.index.ntotal == 0:
+            return
+        if not question_ids:
+            return
+
+        # 删除索引
+        internal_ids = [self.id_mapping[qid] for qid in question_ids]
+        return self.index.remove_ids(internal_ids)
+
     def similarity_search(
         self,
         query: str,

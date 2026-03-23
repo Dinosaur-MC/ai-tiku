@@ -1,5 +1,5 @@
 ---
-trigger: always_on
+trigger: model_decision
 ---
 
 You are using a Git Bash shell by default, please use `/` instead of `\` in your path.
