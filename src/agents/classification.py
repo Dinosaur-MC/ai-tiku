@@ -1,6 +1,7 @@
 """
 题目分类 Agent - 基于 LangChain/LangGraph + Pydantic 实现
 负责自动将题目分类到合适的类别
+注意：此 Agent 仅负责 AI 分类逻辑，不直接访问数据库和 service 层
 """
 from typing import List, Dict, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -8,8 +9,6 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 import logging
-import json
-import re
 
 from utils.llm import chat
 from agents.prompts.classify import build_classification_prompt
@@ -38,17 +37,20 @@ class ClassificationAgent:
     def __init__(self):
         """初始化分类 Agent"""
         self.available_categories = []
-        self._load_categories()
         # 初始化 Pydantic 输出解析器
         self.parser = PydanticOutputParser(pydantic_object=ClassificationResult)
         self._build_graph()
         logger.info("ClassificationAgent 初始化完成，Pydantic 解析器已初始化")
     
-    def _load_categories(self):
-        """加载所有可用分类"""
-        from db import db
-        self.available_categories = db.get_all_categories()
-        logger.debug(f"已加载 {len(self.available_categories)} 个分类")
+    def set_categories(self, categories: List[Dict]):
+        """
+        设置可用分类列表（由外部传入）
+        
+        Args:
+            categories: 分类列表，每个包含 id, name, description
+        """
+        self.available_categories = categories
+        logger.debug(f"已设置 {len(self.available_categories)} 个分类")
     
     def _build_graph(self):
         """构建 LangGraph 工作流"""
@@ -127,7 +129,16 @@ class ClassificationAgent:
             return {'category_results': []}
     
     def classify(self, question_text: str, options: List[str] = None) -> List[Dict]:
-        """对题目进行分类"""
+        """
+        对题目进行分类
+        
+        Args:
+            question_text: 题目文本
+            options: 选项列表
+            
+        Returns:
+            分类结果列表
+        """
         logger.info(f"收到分类请求：question='{question_text[:50]}...'")
         
         initial_state = {
@@ -141,26 +152,6 @@ class ClassificationAgent:
         logger.info(f"分类完成，返回 {len(result['category_results'])} 个结果")
         
         return result['category_results']
-    
-    def add_category(self, name: str, description: str = None) -> int:
-        """添加新分类"""
-        from db import db
-        category_id = db.create_category(name, description)
-        self._load_categories()
-        logger.info(f"新增分类：id={category_id}, name={name}")
-        return category_id
-    
-    def assign_to_question(self, question_id: int, category_ids: List[int]):
-        """将题目分配到多个分类"""
-        from db import db
-        for cat_id in category_ids:
-            db.assign_category(question_id, cat_id)
-        logger.info(f"题目{question_id}分配到分类：{category_ids}")
-    
-    def get_categories_for_question(self, question_id: int) -> List[Dict]:
-        """获取题目的所有分类"""
-        # TODO: 需要从数据库查询
-        return []
 
 
 # 单例模式

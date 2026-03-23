@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 import logging
 
 from utils.llm import chat
-from db import VectorStore
+from utils.dbc import VectorStore
 
 logger = logging.getLogger(__name__)
 
