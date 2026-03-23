@@ -206,9 +206,9 @@ class QuestionService:
         self.session.delete(question)
         self.session.commit()
 
-        # TODO: 从向量库中移除
-        # vector_store = VectorStore()
-        # vector_store.remove_document(question_id)
+        # 从向量库中移除
+        vector_store = VectorStore()
+        vector_store.remove_documents([question_id])
 
         return True
 
@@ -327,5 +327,6 @@ class QuestionService:
                 stats["ai_generated_count"] += 1
 
         return stats
+
 
 question_service = QuestionService()
