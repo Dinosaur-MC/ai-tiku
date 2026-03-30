@@ -116,9 +116,9 @@ async def favicon():
 
 def main():
     print("Hello from ai-tiku!")
-    import uvicorn
+    import uvicorn, os
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=os.getenv("DEBUG", False))
 
 
 if __name__ == "__main__":

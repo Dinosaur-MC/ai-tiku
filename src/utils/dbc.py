@@ -156,7 +156,7 @@ class VectorStore:
 
     def __init__(self, category_id: int = 0, category_name: Optional[str] = None):
         self.category_id = category_id
-        self.category_name = category_name
+        self.category_name = category_name or self._get_category_name()
         self.index_path = EMBEDDINGS_DIR / f"faiss_{category_id}.index"
         self.embedder = OllamaEmbeddings(
             model=os.environ.get("EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b")
@@ -168,6 +168,12 @@ class VectorStore:
 
         if self.index_path.exists():
             self.load_index()
+
+    def _get_category_name(self) -> Optional[str]:
+        """获取分类名称"""
+
+        category = db.read_one(Category, self.category_id)
+        return category.name if category else None
 
     def load_index(self):
         """加载 FAISS 索引"""

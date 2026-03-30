@@ -5,7 +5,6 @@
 
 from typing import List, Optional, Dict
 from sqlmodel import Session, select
-from datetime import datetime
 
 from models import Category, QuestionCategory, Question
 from utils.dbc import db, VectorStore
