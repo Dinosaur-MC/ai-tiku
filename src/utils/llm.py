@@ -8,63 +8,206 @@ LLM 工具模块 - 基于 LangChain/LangGraph 最佳实践
 """
 
 import os
-from typing import List, Dict, Optional, Callable
-from langchain_ollama import OllamaEmbeddings, ChatOllama, OllamaLLM
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain.agents import create_agent
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langchain.tools import tool
-from pydantic import BaseModel
 from logging import getLogger
+from typing import Callable, Dict, List, Literal, Optional
+
+from langchain.agents import create_agent
+from langchain.tools import tool
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_ollama import ChatOllama, OllamaEmbeddings, OllamaLLM
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langgraph.graph import END, START, MessagesState, StateGraph
+from pydantic import BaseModel
 
 logger = getLogger(__name__)
 
 
 # ==================== 配置管理 ====================
 
+ProviderName = Literal["ollama", "openai_compatible"]
 
-class LLMConfig(BaseModel):
-    """LLM 配置模型"""
 
-    model_name: str = "qwen3.5:2b"
-    embedding_model: str = "qwen3-embedding:0.6b"
-    temperature: float = 0.1
+class ChatConfig(BaseModel):
+    """Chat 模型配置"""
+
+    provider: ProviderName
+    model: str
     base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    temperature: float
 
 
-def get_llm_config() -> LLMConfig:
-    """从环境变量获取 LLM 配置"""
-    return LLMConfig(
-        model_name=os.environ.get("MODEL_NAME", "qwen3.5:2b"),
-        embedding_model=os.environ.get("EMBEDDING_MODEL_NAME", "qwen3-embedding:0.6b"),
-        temperature=float(os.environ.get("MODEL_TEMPERATURE", "0.1")),
-        base_url=os.environ.get("OLLAMA_BASE_URL"),
+class CompletionConfig(BaseModel):
+    """Completion 模型配置"""
+
+    provider: ProviderName
+    model: str
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    temperature: float
+
+
+class EmbeddingConfig(BaseModel):
+    """Embedding 模型配置"""
+
+    provider: ProviderName
+    model: str
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+
+
+class LLMSettings(BaseModel):
+    """按能力划分的 LLM 配置"""
+
+    chat: ChatConfig
+    completion: CompletionConfig
+    embedding: EmbeddingConfig
+
+
+def _read_temperature(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    return float(raw) if raw is not None else default
+
+
+def _require(value: Optional[str], env_name: str, provider: str) -> str:
+    if value:
+        return value
+    raise ValueError(f"{env_name} is required when provider={provider}")
+
+
+def _read_provider_model(prefix: str, default_model: str) -> tuple[str, str]:
+    provider = os.environ.get(f"{prefix}_PROVIDER", "ollama")
+    if provider not in {"ollama", "openai_compatible"}:
+        raise ValueError(f"unsupported {prefix}_PROVIDER '{provider}'")
+
+    model = os.environ.get(f"{prefix}_MODEL")
+    if provider == "openai_compatible":
+        return provider, _require(model, f"{prefix}_MODEL", provider)
+
+    return provider, model or default_model
+
+
+def _validate_provider_config(prefix: str, config: BaseModel) -> None:
+    provider = getattr(config, "provider")
+    if provider == "openai_compatible":
+        _require(getattr(config, "base_url", None), f"{prefix}_BASE_URL", provider)
+        _require(getattr(config, "api_key", None), f"{prefix}_API_KEY", provider)
+
+
+def get_llm_settings() -> LLMSettings:
+    """从环境变量获取按能力划分的 LLM 配置"""
+
+    default_temperature = float(os.environ.get("MODEL_TEMPERATURE", "0.1"))
+    chat_provider, chat_model = _read_provider_model("CHAT", "qwen3.5:2b")
+    completion_provider, completion_model = _read_provider_model(
+        "COMPLETION", "qwen3.5:2b"
     )
+    embedding_provider, embedding_model = _read_provider_model(
+        "EMBEDDING", "nomic-embed-text"
+    )
+    settings = LLMSettings(
+        chat=ChatConfig(
+            provider=chat_provider,
+            model=chat_model,
+            base_url=os.environ.get("CHAT_BASE_URL"),
+            api_key=os.environ.get("CHAT_API_KEY"),
+            temperature=_read_temperature("CHAT_TEMPERATURE", default_temperature),
+        ),
+        completion=CompletionConfig(
+            provider=completion_provider,
+            model=completion_model,
+            base_url=os.environ.get("COMPLETION_BASE_URL"),
+            api_key=os.environ.get("COMPLETION_API_KEY"),
+            temperature=_read_temperature(
+                "COMPLETION_TEMPERATURE", default_temperature
+            ),
+        ),
+        embedding=EmbeddingConfig(
+            provider=embedding_provider,
+            model=embedding_model,
+            base_url=os.environ.get("EMBEDDING_BASE_URL"),
+            api_key=os.environ.get("EMBEDDING_API_KEY"),
+        ),
+    )
+    _validate_provider_config("CHAT", settings.chat)
+    _validate_provider_config("COMPLETION", settings.completion)
+    _validate_provider_config("EMBEDDING", settings.embedding)
+    return settings
 
 
 # ==================== 全局 LLM 实例 ====================
 
-# 初始化配置
-config = get_llm_config()
+settings = get_llm_settings()
 
-# 初始化 Embeddings
-embedder = OllamaEmbeddings(model=config.embedding_model, base_url=config.base_url)
 
-# 创建 Completion 模型
-completion = OllamaLLM(
-    model=config.model_name,
-    temperature=config.temperature,
-    base_url=config.base_url,
-    reasoning=False,
-)
+class OpenAICompatibleCompletionAdapter:
+    def __init__(self, client: ChatOpenAI):
+        self.client = client
 
-# 初始化 Chat 模型
-chat = ChatOllama(
-    model=config.model_name,
-    temperature=config.temperature,
-    base_url=config.base_url,
-    reasoning=False,
-)
+    @staticmethod
+    def _as_text(response) -> str:
+        content = getattr(response, "content", response)
+        return content if isinstance(content, str) else str(content)
+
+    def invoke(self, prompt: str, **kwargs) -> str:
+        response = self.client.invoke([HumanMessage(content=prompt)], **kwargs)
+        return self._as_text(response)
+
+    async def ainvoke(self, prompt: str, **kwargs) -> str:
+        response = await self.client.ainvoke([HumanMessage(content=prompt)], **kwargs)
+        return self._as_text(response)
+
+
+def build_chat_model(config: ChatConfig):
+    if config.provider == "ollama":
+        return ChatOllama(
+            model=config.model,
+            temperature=config.temperature,
+            base_url=config.base_url,
+            reasoning=False,
+        )
+    return ChatOpenAI(
+        model=config.model,
+        temperature=config.temperature,
+        base_url=config.base_url,
+        api_key=config.api_key,
+    )
+
+
+def build_completion_model(config: CompletionConfig):
+    if config.provider == "ollama":
+        return OllamaLLM(
+            model=config.model,
+            temperature=config.temperature,
+            base_url=config.base_url,
+            reasoning=False,
+        )
+    return OpenAICompatibleCompletionAdapter(
+        ChatOpenAI(
+            model=config.model,
+            temperature=config.temperature,
+            base_url=config.base_url,
+            api_key=config.api_key,
+        )
+    )
+
+
+def build_embedding_model(config: EmbeddingConfig):
+    if config.provider == "ollama":
+        return OllamaEmbeddings(
+            model=config.model,
+            base_url=config.base_url,
+        )
+    return OpenAIEmbeddings(
+        model=config.model,
+        base_url=config.base_url,
+        api_key=config.api_key,
+    )
+
+
+chat = build_chat_model(settings.chat)
+completion = build_completion_model(settings.completion)
+embedder = build_embedding_model(settings.embedding)
 
 # ==================== Agent Factory ====================
 

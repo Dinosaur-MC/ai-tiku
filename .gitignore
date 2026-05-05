@@ -289,3 +289,7 @@ data/*
 !data/README.md
 src/test/*
 !src/test/README.md
+
+.claude/
+CLAUDE.md
+docs/superpowers/plans

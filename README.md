@@ -97,7 +97,7 @@ AI 题库答题服务系统 - 基于 AI 的智能题库查询和答题解决方�
    - FAISS 向量数据库
    - 数据持久化管理
 
-6. **LLM 层** (`llm.py`)
+6. **LLM 层** (`src/utils/llm.py`)
    - 统一的模型调用接口
    - 支持流式和异步操作
    - 多模型后端适配
@@ -112,7 +112,7 @@ AI 题库答题服务系统 - 基于 AI 的智能题库查询和答题解决方�
 ### 环境要求
 
 - Python 3.12+
-- Ollama（用于运行本地 LLM）
+- Ollama（使用本地模型时需要）或兼容 OpenAI 的接口服务
 - uv 或 pip（包管理工具）
 
 ### 1. 安装依赖
@@ -130,11 +130,57 @@ pip install -e .
 ```bash
 # 复制配置文件
 cp .env.example .env
+```
 
-# 编辑 .env 文件，配置模型参数
-MODEL_NAME=qwen3.5:2b
-EMBEDDING_MODEL_NAME=nomic-embed-text
-MODEL_TEMPERATURE=0.1
+本项目支持 `ollama` 与通用 `openai_compatible` provider，模型路由与初始化逻辑集中在 `src/utils/llm.py`。
+
+支持的 provider：
+- `ollama`
+- `openai_compatible`
+
+按能力分别配置 `CHAT_*`、`COMPLETION_*`、`EMBEDDING_*` 环境变量：
+
+```bash
+# Chat provider
+CHAT_PROVIDER=ollama
+CHAT_MODEL=qwen3.5:2b
+CHAT_BASE_URL=http://localhost:11434
+CHAT_API_KEY=
+CHAT_TEMPERATURE=0.1
+
+# Completion provider
+COMPLETION_PROVIDER=ollama
+COMPLETION_MODEL=qwen3.5:2b
+COMPLETION_BASE_URL=http://localhost:11434
+COMPLETION_API_KEY=
+COMPLETION_TEMPERATURE=0.1
+
+# Embedding provider
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_API_KEY=
+```
+
+混合 provider 配置示例：
+
+```bash
+CHAT_PROVIDER=openai_compatible
+CHAT_MODEL=gpt-4o-mini
+CHAT_BASE_URL=https://api.openai.com/v1
+CHAT_API_KEY=your-openai-compatible-key
+CHAT_TEMPERATURE=0.1
+
+COMPLETION_PROVIDER=ollama
+COMPLETION_MODEL=qwen3.5:2b
+COMPLETION_BASE_URL=http://localhost:11434
+COMPLETION_API_KEY=
+COMPLETION_TEMPERATURE=0.1
+
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_API_KEY=
 ```
 
 ### 3. 初始化数据库
@@ -270,7 +316,8 @@ ai-tiku/
 │   ├── answer_retriever.py
 │   ├── api.py
 │   ├── db.py
-│   ├── llm.py
+│   ├── utils/             # DB / VectorStore / LLM / JWT 工具
+│   │   └── llm.py         # Provider 路由与模型初始化
 │   ├── main.py
 │   ├── ui.py
 │   └── init_db.py
@@ -354,11 +401,30 @@ print(response['sources'])  # 引用来源
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| MODEL_NAME | qwen3.5:2b | LLM 模型名称 |
-| EMBEDDING_MODEL_NAME | nomic-embed-text | Embedding 模型名称 |
-| MODEL_TEMPERATURE | 0.1 | 模型温度（0-1） |
+| MODEL_TEMPERATURE | 0.1 | 全局默认温度 |
+| CHAT_PROVIDER | ollama | Chat provider，可选 `ollama` / `openai_compatible` |
+| CHAT_MODEL | qwen3.5:2b | Chat 模型名称 |
+| CHAT_BASE_URL | http://localhost:11434 | Chat provider 接口地址 |
+| CHAT_API_KEY | 空 | Chat provider API Key |
+| CHAT_TEMPERATURE | 0.1 | Chat 温度，未设置时可回退到全局温度 |
+| COMPLETION_PROVIDER | ollama | Completion provider，可选 `ollama` / `openai_compatible` |
+| COMPLETION_MODEL | qwen3.5:2b | Completion 模型名称 |
+| COMPLETION_BASE_URL | http://localhost:11434 | Completion provider 接口地址 |
+| COMPLETION_API_KEY | 空 | Completion provider API Key |
+| COMPLETION_TEMPERATURE | 0.1 | Completion 温度，未设置时可回退到全局温度 |
+| EMBEDDING_PROVIDER | ollama | Embedding provider，可选 `ollama` / `openai_compatible` |
+| EMBEDDING_MODEL | nomic-embed-text | Embedding 模型名称 |
+| EMBEDDING_BASE_URL | http://localhost:11434 | Embedding provider 接口地址 |
+| EMBEDDING_API_KEY | 空 | Embedding provider API Key |
 | DATABASE_PATH | data/db.sqlite3 | SQLite 数据库路径 |
 | EMBEDDINGS_DIR | data/embeddings | 向量库目录 |
+
+### Provider 配置
+
+本项目支持 `ollama` 与通用 `openai_compatible` provider，模型路由与初始化逻辑集中在 `src/utils/llm.py`。
+
+- `ollama`：适合本地模型部署，通常使用 `http://localhost:11434`
+- `openai_compatible`：适合任何兼容 OpenAI 接口协议的服务，且当 `*_PROVIDER=openai_compatible` 时必须显式配置对应的 `*_MODEL`、`*_BASE_URL`、`*_API_KEY`
 
 ### Ollama 配置
 
@@ -373,18 +439,47 @@ ollama pull nomic-embed-text
 ollama serve
 ```
 
-### 自定义模型
-
-如需使用其他模型，修改 `.env` 文件：
+### 混合 Provider 示例
 
 ```bash
-# 使用 OpenAI
-MODEL_NAME=gpt-3.5-turbo
-EMBEDDING_MODEL_NAME=text-embedding-ada-002
+MODEL_TEMPERATURE=0.1
 
-# 使用本地其他模型
-MODEL_NAME=llama3.2:3b
-EMBEDDING_MODEL_NAME=mxbai-embed-large
+CHAT_PROVIDER=openai_compatible
+CHAT_MODEL=gpt-4o-mini
+CHAT_BASE_URL=https://api.openai.com/v1
+CHAT_API_KEY=your-openai-compatible-key
+CHAT_TEMPERATURE=0.1
+
+COMPLETION_PROVIDER=ollama
+COMPLETION_MODEL=qwen3.5:2b
+COMPLETION_BASE_URL=http://localhost:11434
+COMPLETION_API_KEY=
+COMPLETION_TEMPERATURE=0.1
+
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_API_KEY=
+```
+
+### 自定义模型
+
+如需切换模型或 provider，修改 `.env` 文件中的对应能力配置：
+
+```bash
+CHAT_PROVIDER=openai_compatible
+CHAT_MODEL=gpt-4o-mini
+CHAT_BASE_URL=https://api.openai.com/v1
+CHAT_API_KEY=your-openai-compatible-key
+
+COMPLETION_PROVIDER=ollama
+COMPLETION_MODEL=llama3.2:3b
+COMPLETION_BASE_URL=http://localhost:11434
+
+EMBEDDING_PROVIDER=openai_compatible
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_BASE_URL=https://api.openai.com/v1
+EMBEDDING_API_KEY=your-openai-compatible-key
 ```
 
 ## 📊 数据库表结构
