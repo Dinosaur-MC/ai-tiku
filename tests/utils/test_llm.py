@@ -302,7 +302,7 @@ def test_openai_compatible_completion_adapter_stringifies_non_string_content(mon
     )
 
     monkeypatch.setattr(
-        llm.completion.client,
+        llm.completion.client.client,
         "invoke",
         lambda messages, **kwargs: SimpleNamespace(content={"answer": 42}),
     )
@@ -404,3 +404,221 @@ async def test_astream_llm_yields_chat_chunks(monkeypatch):
         parts.append(chunk)
 
     assert "".join(parts) == "fake-openai-astream"
+
+
+class RetryableProviderError(Exception):
+    def __init__(self, status_code=None):
+        super().__init__(f"retryable:{status_code}")
+        self.status_code = status_code
+
+
+class NonRetryableProviderError(Exception):
+    def __init__(self, status_code=None):
+        super().__init__(f"non_retryable:{status_code}")
+        self.status_code = status_code
+
+
+def test_retry_delay_schedule():
+    import utils.llm as llm
+
+    assert llm._get_retry_delay(1) == 1.0
+    assert llm._get_retry_delay(2) == 1.0
+    assert llm._get_retry_delay(3) == 1.0
+    assert llm._get_retry_delay(4) == 2.0
+    assert llm._get_retry_delay(5) == 4.0
+
+
+@pytest.mark.parametrize("status_code", [429, 529, 401, 502])
+def test_retryable_http_statuses(status_code):
+    import utils.llm as llm
+
+    assert llm._is_retryable_exception(RetryableProviderError(status_code)) is True
+
+
+@pytest.mark.parametrize("status_code", [403, 404, 500])
+def test_non_retryable_http_statuses(status_code):
+    import utils.llm as llm
+
+    assert llm._is_retryable_exception(NonRetryableProviderError(status_code)) is False
+
+
+def test_sync_retry_stops_on_non_retryable(monkeypatch):
+    import utils.llm as llm
+
+    calls = {"count": 0}
+
+    def fail_once():
+        calls["count"] += 1
+        raise NonRetryableProviderError(404)
+
+    with pytest.raises(NonRetryableProviderError):
+        llm._with_retry(fail_once)
+
+    assert calls["count"] == 1
+
+
+def test_sync_retry_retries_then_succeeds(monkeypatch):
+    import utils.llm as llm
+
+    calls = {"count": 0}
+    delays = []
+
+    def fake_sleep(seconds):
+        delays.append(seconds)
+
+    monkeypatch.setattr(llm.time, "sleep", fake_sleep)
+
+    def flaky():
+        calls["count"] += 1
+        if calls["count"] < 4:
+            raise RetryableProviderError(429)
+        return "ok"
+
+    assert llm._with_retry(flaky) == "ok"
+    assert calls["count"] == 4
+    assert delays == [1.0, 1.0, 1.0]
+
+
+def test_sync_retry_exhausts_after_ten_attempts(monkeypatch):
+    import utils.llm as llm
+
+    calls = {"count": 0}
+    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
+
+    def always_fail():
+        calls["count"] += 1
+        raise RetryableProviderError(502)
+
+    with pytest.raises(RetryableProviderError):
+        llm._with_retry(always_fail)
+
+    assert calls["count"] == 10
+
+
+@pytest.mark.asyncio
+async def test_async_retry_retries_then_succeeds(monkeypatch):
+    import utils.llm as llm
+
+    calls = {"count": 0}
+    delays = []
+
+    async def fake_sleep(seconds):
+        delays.append(seconds)
+
+    monkeypatch.setattr(llm.asyncio, "sleep", fake_sleep)
+
+    async def flaky():
+        calls["count"] += 1
+        if calls["count"] < 3:
+            raise RetryableProviderError(429)
+        return "ok"
+
+    assert await llm._with_retry_async(flaky) == "ok"
+    assert calls["count"] == 3
+    assert delays == [1.0, 1.0]
+
+
+def test_completion_adapter_stringifies_non_string_content(monkeypatch):
+    import utils.llm as llm
+
+    client = FakeChatOpenAI(model="gpt-4o-mini")
+    client.invoke = lambda messages, **kwargs: SimpleNamespace(content={"answer": "ok"})
+    adapter = llm.OpenAICompatibleCompletionAdapter(client)
+
+    assert adapter.invoke("hello") == "{'answer': 'ok'}"
+
+
+def test_openai_compatible_completion_adapter_does_not_retry_internally(monkeypatch):
+    import utils.llm as llm
+
+    calls = {"count": 0}
+    monkeypatch.setattr(llm.time, "sleep", lambda seconds: None)
+
+    client = FakeChatOpenAI(model="gpt-4o-mini")
+
+    def always_fail(messages, **kwargs):
+        calls["count"] += 1
+        raise RetryableProviderError(429)
+
+    client.invoke = always_fail
+    adapter = llm.OpenAICompatibleCompletionAdapter(client)
+
+    with pytest.raises(RetryableProviderError):
+        adapter.invoke("hello")
+
+    assert calls["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_completion_adapter_does_not_retry_internally_async(
+    monkeypatch,
+):
+    import utils.llm as llm
+
+    calls = {"count": 0}
+
+    async def fake_sleep(seconds):
+        return None
+
+    monkeypatch.setattr(llm.asyncio, "sleep", fake_sleep)
+
+    client = FakeChatOpenAI(model="gpt-4o-mini")
+
+    async def always_fail(messages, **kwargs):
+        calls["count"] += 1
+        raise RetryableProviderError(429)
+
+    client.ainvoke = always_fail
+    adapter = llm.OpenAICompatibleCompletionAdapter(client)
+
+    with pytest.raises(RetryableProviderError):
+        await adapter.ainvoke("hello")
+
+    assert calls["count"] == 1
+
+
+def test_builds_retrying_openai_compatible_completion_model(monkeypatch):
+    llm = reload_llm(
+        monkeypatch,
+        {
+            "CHAT_PROVIDER": "ollama",
+            "CHAT_MODEL": "qwen3.5:2b",
+            "COMPLETION_PROVIDER": "openai_compatible",
+            "COMPLETION_MODEL": "gpt-4o-mini",
+            "COMPLETION_BASE_URL": "https://completion.example.test/v1",
+            "COMPLETION_API_KEY": "sk-completion",
+            "EMBEDDING_PROVIDER": "ollama",
+            "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+        },
+    )
+
+    assert isinstance(llm.completion, llm.RetryingCompletionModel)
+    assert isinstance(llm.completion.client, llm.OpenAICompatibleCompletionAdapter)
+
+
+def test_retrying_completion_model_retries_ollama_completion(monkeypatch):
+    import utils.llm as llm
+
+    calls = {"count": 0}
+    delays = []
+
+    def fake_sleep(seconds):
+        delays.append(seconds)
+
+    monkeypatch.setattr(llm.time, "sleep", fake_sleep)
+
+    client = FakeOllamaLLM(model="qwen3.5:2b")
+
+    def flaky(prompt, **kwargs):
+        calls["count"] += 1
+        if calls["count"] < 4:
+            raise RetryableProviderError(429)
+        return "ok"
+
+    client.invoke = flaky
+    completion = llm.RetryingCompletionModel(client)
+
+    assert completion.invoke("hello") == "ok"
+    assert calls["count"] == 4
+    assert delays == [1.0, 1.0, 1.0]
+

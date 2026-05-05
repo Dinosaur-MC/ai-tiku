@@ -7,7 +7,9 @@ LLM 工具模块 - 基于 LangChain/LangGraph 最佳实践
 3. 统一的配置管理
 """
 
+import asyncio
 import os
+import time
 from logging import getLogger
 from typing import Callable, Dict, List, Literal, Optional
 
@@ -94,6 +96,65 @@ def _validate_provider_config(prefix: str, config: BaseModel) -> None:
         _require(getattr(config, "api_key", None), f"{prefix}_API_KEY", provider)
 
 
+RETRYABLE_STATUS_CODES = {429, 529, 401, 502}
+NON_RETRYABLE_STATUS_CODES = {403, 404, 500}
+MAX_RETRY_ATTEMPTS = 10
+
+
+def _extract_status_code(exc: Exception) -> Optional[int]:
+    value = getattr(exc, "status_code", None)
+    if isinstance(value, int):
+        return value
+    response = getattr(exc, "response", None)
+    response_status = getattr(response, "status_code", None)
+    return response_status if isinstance(response_status, int) else None
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    status_code = _extract_status_code(exc)
+    if status_code in RETRYABLE_STATUS_CODES:
+        return True
+    if status_code in NON_RETRYABLE_STATUS_CODES:
+        return False
+
+    name = exc.__class__.__name__.lower()
+    message = str(exc).lower()
+    transient_markers = [
+        "timeout",
+        "timed out",
+        "connection",
+        "connect",
+        "temporarily unavailable",
+    ]
+    return any(marker in name or marker in message for marker in transient_markers)
+
+
+def _get_retry_delay(attempt: int) -> float:
+    if attempt <= 3:
+        return 1.0
+    return float(2 ** (attempt - 3))
+
+
+def _with_retry(func):
+    for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
+        try:
+            return func()
+        except Exception as exc:
+            if attempt >= MAX_RETRY_ATTEMPTS or not _is_retryable_exception(exc):
+                raise
+            time.sleep(_get_retry_delay(attempt))
+
+
+async def _with_retry_async(func):
+    for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
+        try:
+            return await func()
+        except Exception as exc:
+            if attempt >= MAX_RETRY_ATTEMPTS or not _is_retryable_exception(exc):
+                raise
+            await asyncio.sleep(_get_retry_delay(attempt))
+
+
 def get_llm_settings() -> LLMSettings:
     """从环境变量获取按能力划分的 LLM 配置"""
 
@@ -158,51 +219,120 @@ class OpenAICompatibleCompletionAdapter:
         return self._as_text(response)
 
 
+class RetryingChatModel:
+    def __init__(self, client):
+        self.client = client
+
+    @property
+    def __class__(self):
+        return self.client.__class__
+
+    def invoke(self, messages, **kwargs):
+        return _with_retry(lambda: self.client.invoke(messages, **kwargs))
+
+    async def ainvoke(self, messages, **kwargs):
+        return await _with_retry_async(lambda: self.client.ainvoke(messages, **kwargs))
+
+    def stream(self, messages, **kwargs):
+        return self.client.stream(messages, **kwargs)
+
+    async def astream(self, messages, **kwargs):
+        async for chunk in self.client.astream(messages, **kwargs):
+            yield chunk
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+
+class RetryingEmbeddings:
+    def __init__(self, client):
+        self.client = client
+
+    @property
+    def __class__(self):
+        return self.client.__class__
+
+    def embed_query(self, text: str):
+        return _with_retry(lambda: self.client.embed_query(text))
+
+    def embed_documents(self, texts):
+        return _with_retry(lambda: self.client.embed_documents(texts))
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+
+class RetryingCompletionModel:
+    def __init__(self, client):
+        self.client = client
+
+    @property
+    def __class__(self):
+        return self.client.__class__
+
+    def invoke(self, prompt: str, **kwargs):
+        return _with_retry(lambda: self.client.invoke(prompt, **kwargs))
+
+    async def ainvoke(self, prompt: str, **kwargs):
+        return await _with_retry_async(lambda: self.client.ainvoke(prompt, **kwargs))
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+
 def build_chat_model(config: ChatConfig):
     if config.provider == "ollama":
-        return ChatOllama(
+        client = ChatOllama(
             model=config.model,
             temperature=config.temperature,
             base_url=config.base_url,
             reasoning=False,
         )
-    return ChatOpenAI(
-        model=config.model,
-        temperature=config.temperature,
-        base_url=config.base_url,
-        api_key=config.api_key,
-    )
-
-
-def build_completion_model(config: CompletionConfig):
-    if config.provider == "ollama":
-        return OllamaLLM(
-            model=config.model,
-            temperature=config.temperature,
-            base_url=config.base_url,
-            reasoning=False,
-        )
-    return OpenAICompatibleCompletionAdapter(
-        ChatOpenAI(
+    else:
+        client = ChatOpenAI(
             model=config.model,
             temperature=config.temperature,
             base_url=config.base_url,
             api_key=config.api_key,
+        )
+    return RetryingChatModel(client)
+
+
+def build_completion_model(config: CompletionConfig):
+    if config.provider == "ollama":
+        return RetryingCompletionModel(
+            OllamaLLM(
+                model=config.model,
+                temperature=config.temperature,
+                base_url=config.base_url,
+                reasoning=False,
+            )
+        )
+    return RetryingCompletionModel(
+        OpenAICompatibleCompletionAdapter(
+            ChatOpenAI(
+                model=config.model,
+                temperature=config.temperature,
+                base_url=config.base_url,
+                api_key=config.api_key,
+            )
         )
     )
 
 
 def build_embedding_model(config: EmbeddingConfig):
     if config.provider == "ollama":
-        return OllamaEmbeddings(
+        client = OllamaEmbeddings(
             model=config.model,
             base_url=config.base_url,
         )
-    return OpenAIEmbeddings(
-        model=config.model,
-        base_url=config.base_url,
-        api_key=config.api_key,
-    )
+    else:
+        client = OpenAIEmbeddings(
+            model=config.model,
+            base_url=config.base_url,
+            api_key=config.api_key,
+        )
+    return RetryingEmbeddings(client)
 
 
 chat = build_chat_model(settings.chat)

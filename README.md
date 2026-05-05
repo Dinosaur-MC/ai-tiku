@@ -214,7 +214,7 @@ python src/main.py
 
 ### 查题接口
 
-**GET** `/api/query`
+**GET** `/api/v1/query`
 
 根据题目内容搜索答案。
 
@@ -228,10 +228,34 @@ python src/main.py
 | q | string | 否 | 题目内容 |
 | options | string | 否 | 选项内容，多个用换行分隔 |
 | type | string | 否 | 题目类型（single/multiple/judgement/completion/unknown） |
+| stream | boolean | 否 | 设为 `true` 时启用 SSE 心跳流式响应 |
 
-#### 响应示例
+#### 响应说明
 
-``json
+- 默认返回 `application/json`
+- `stream=true` 时返回 `text/event-stream`
+- 查询处理中每 15 秒发送一次 `heartbeat` 事件
+- 最后一条 `result` 事件包含完整 JSON 结果，结构与普通查询响应一致
+
+#### 示例请求
+
+```bash
+curl -N "http://localhost:8000/api/v1/query?token=demo_token_000&title=中国梦的本质是什么？&stream=true"
+```
+
+#### SSE 事件示例
+
+```text
+event: heartbeat
+data: {}
+
+event: result
+data: {"code": 1, "message": "请求成功", "data": {"question": "中国梦的本质是什么？", "answer": "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。", "times": 999, "ai": false}}
+```
+
+#### 非流式响应示例
+
+```json
 {
   "code": 1,
   "message": "请求成功",

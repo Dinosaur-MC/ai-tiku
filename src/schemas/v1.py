@@ -20,6 +20,7 @@ class QueryRequest(BaseModel):
     options: Optional[str] = Field(None, description="选项内容，多个用换行符分隔")
     type: Optional[str] = Field("unknown", description="题目类型")
     more: Optional[bool] = Field(False, description="是否返回多个结果（已禁用）")
+    stream: bool = Field(False, description="是否使用 SSE 流式返回结果")
 
     def get_question_text(self) -> str:
         """获取题目文本（优先级：title> q > question）"""
