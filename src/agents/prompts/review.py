@@ -29,6 +29,7 @@ REVIEW_SYSTEM_PROMPT = """你是一个专业的答案审核员。你的任务是
 
 REVIEW_USER_PROMPT_TEMPLATE = """请审核以下题目的答案。
 
+学科/课程: {subject}
 题目：{question}
 
 {options_section}
@@ -42,19 +43,25 @@ REVIEW_USER_PROMPT_TEMPLATE = """请审核以下题目的答案。
 请从准确性、匹配性、事实性、规范性和清晰性等维度进行审核，返回 JSON 格式的审核结果。"""
 
 
-def build_review_prompt(question: str, answer: str, options: list = None,
-                       question_type: str = "unknown", 
-                       corrections: str = None) -> str:
+def build_review_prompt(
+    question: str,
+    answer: str,
+    options: list = None,
+    question_type: str = "unknown",
+    subject: str = None,
+    corrections: str = None,
+) -> str:
     """
     构建完整的复审提示词
-    
+
     Args:
         question: 题目内容
         answer: 待审核的答案
         options: 选项列表（可选）
         question_type: 题目类型
+        subject: 科目/课程名称
         corrections: 用户修正建议（可选）
-    
+
     Returns:
         完整的提示词字符串
     """
@@ -63,7 +70,7 @@ def build_review_prompt(question: str, answer: str, options: list = None,
     if options:
         options_lines = [f"{chr(65 + i)}. {opt}" for i, opt in enumerate(options)]
         options_section = f"选项：\n{'\n'.join(options_lines)}\n"
-    
+
     # 构建题型部分
     type_section = ""
     if question_type and question_type != "unknown":
@@ -73,22 +80,23 @@ def build_review_prompt(question: str, answer: str, options: list = None,
             "judgement": "判断题",
             "completion": "填空题",
             "essay": "简答题",
-            "analysis": "分析题"
+            "analysis": "分析题",
         }
         type_name = type_map.get(question_type, "未知题型")
         type_section = f"题型：{type_name}\n"
-    
+
     # 构建修正建议部分
     corrections_section = ""
     if corrections:
         corrections_section = f"用户修正建议：\n{corrections}\n"
-    
+
     return REVIEW_USER_PROMPT_TEMPLATE.format(
+        subject=subject,
         question=question,
         answer=answer,
         options_section=options_section,
         type_section=type_section,
-        corrections_section=corrections_section
+        corrections_section=corrections_section,
     )
 
 
@@ -124,7 +132,6 @@ SPECIALIZED_REVIEW_PROMPTS = {
 3. 是否存在多选或漏选
 
 返回 JSON 格式审核结果。""",
-
     "multiple": """请专门审核多选题答案。
 
 题目：{question}
@@ -137,7 +144,6 @@ SPECIALIZED_REVIEW_PROMPTS = {
 3. 是否完整选择了所有正确选项
 
 返回 JSON 格式审核结果。""",
-
     "judgement": """请专门审核判断题答案。
 
 题目：{question}
@@ -148,7 +154,6 @@ SPECIALIZED_REVIEW_PROMPTS = {
 2. 判断是否准确
 
 返回 JSON 格式审核结果。""",
-
     "completion": """请专门审核填空题答案。
 
 题目：{question}
@@ -159,7 +164,7 @@ SPECIALIZED_REVIEW_PROMPTS = {
 2. 答案是否准确无误
 3. 表述是否规范
 
-返回 JSON 格式审核结果。"""
+返回 JSON 格式审核结果。""",
 }
 
 

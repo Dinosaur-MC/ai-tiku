@@ -19,6 +19,7 @@ class QueryRequest(BaseModel):
     question: Optional[str] = Field(None, description="题目内容（与 title、q 三选一）")
     options: Optional[str] = Field(None, description="选项内容，多个用换行符分隔")
     type: Optional[str] = Field("unknown", description="题目类型")
+    subject: Optional[str] = Field(None, description="科目/课程名称"),
     more: Optional[bool] = Field(False, description="是否返回多个结果（已禁用）")
     stream: bool = Field(False, description="是否使用 SSE 流式返回结果")
 

@@ -30,6 +30,7 @@ class QueryAgent:
         title: str,
         options: Optional[List[str]] = None,
         question_type: str = "unknown",
+        subject: Optional[str] = None,
     ) -> Dict:
         """
         回答题目
@@ -38,12 +39,15 @@ class QueryAgent:
             question: 题目内容
             options: 选项列表
             question_type: 题目类型
+            subject: 科目/课程名称
 
         Returns:
             答案
         """
 
-        logger.info(f"收到查询请求：question='{title[:50]}...', type={question_type}")
+        logger.info(
+            f"收到查询请求：subject='{subject}', question='{(title+str(options))[:128]}...', type={question_type}"
+        )
 
         try:
             # 1. Type Detection
@@ -80,8 +84,9 @@ class QueryAgent:
 
             # 2. Generate Answer
             logger.debug("Generating Answer...")
-            query_prompt = build_query_prompt(question_type, title, options)
-            answer = completion.invoke(query_prompt).strip()
+            query_prompt = build_query_prompt(question_type, title, options, subject)
+            answer: str = completion.invoke(query_prompt).strip()
+            answer = re.sub(r"^<think>(.*?)</think>", "", answer)
             logger.debug(f"Raw Answer: {answer}")
 
             if question_type == "completion":
@@ -97,7 +102,9 @@ class QueryAgent:
 
             # 3. Format Check
             logger.debug("Checking Format...")
-            is_valid = self._check_output_format(answer, question_type)
+            is_valid = (
+                self._check_output_format(answer, question_type) or answer == "None"
+            )
 
             if not is_valid:
                 logger.debug(
@@ -115,11 +122,18 @@ class QueryAgent:
                         "Correction failed format check. Returning raw corrected output."
                     )
                 logger.info(
-                    f"查询结果（{len(corrected_answer)}）：{corrected_answer[:50]}..."
+                    f"查询结果（{len(corrected_answer)}）：{corrected_answer[:50]}"
+                    + "..."
+                    if len(corrected_answer) > 50
+                    else ""
                 )
                 return corrected_answer
             else:
-                logger.info(f"查询结果（{len(answer)}）：{answer[:50]}...")
+                logger.info(
+                    f"查询结果（{len(answer)}）：{answer[:50]}" + "..."
+                    if len(answer) > 50
+                    else ""
+                )
                 return answer
 
         except Exception as e:

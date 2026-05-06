@@ -33,10 +33,11 @@ router = APIRouter(
 
 
 def _execute_query_sync(
-    token_info,
+    token_info: ApiKey,
     query_text: str,
     options_list,
     question_type: str,
+    subject: str,
     more: bool,
     force_ai: bool,
 ) -> QueryResponse:
@@ -61,7 +62,10 @@ def _execute_query_sync(
 
     if result is None:
         ai_answer = ai_service.generate_answer(
-            query_text, options_list, question_type or "unknown"
+            query_text,
+            options_list,
+            question_type or "unknown",
+            subject,
         )
         result = {
             "found": True,
@@ -89,7 +93,7 @@ def _execute_query_sync(
         )
         return QueryResponse(code=0, message="请求失败", data=response_data)
 
-    results = result.get("similar_results", [])
+    results: list[dict] = result.get("similar_results", [])
     items = [
         MultiResultItem(
             question=item.get("text", ""),
@@ -107,10 +111,11 @@ def _execute_query_sync(
 
 
 async def _execute_query(
-    token_info,
+    token_info: ApiKey,
     query_text: str,
     options_list,
     question_type: str,
+    subject: str,
     more: bool,
     force_ai: bool,
 ) -> QueryResponse:
@@ -120,16 +125,18 @@ async def _execute_query(
         query_text,
         options_list,
         question_type,
+        subject,
         more,
         force_ai,
     )
 
 
 async def _stream_query_response(
-    token_info,
+    token_info: ApiKey,
     query_text: str,
     options_list,
     question_type: str,
+    subject: str,
     more: bool,
     force_ai: bool,
 ):
@@ -139,6 +146,7 @@ async def _stream_query_response(
             query_text,
             options_list,
             question_type,
+            subject,
             more,
             force_ai,
         )
@@ -166,12 +174,13 @@ async def _stream_query_response(
 
 @router.get("/query", response_model=QueryResponse, summary="查题接口 (v1)")
 async def query_question(
-    token_info=Depends(verify_api_token),
+    token_info: ApiKey = Depends(verify_api_token),
     title: Optional[str] = Query(None, description="题目内容"),
     q: Optional[str] = Query(None, description="题目内容"),
     question: Optional[str] = Query(None, description="题目内容"),
     options: Optional[str] = Query(None, description="选项内容"),
     type: Optional[str] = Query("unknown", description="题目类型"),
+    subject: Optional[str] = Query(None, description="科目/课程名称"),
     more: Optional[bool] = Query(False, description="是否返回多个结果（已禁用）"),
     force_ai: Optional[bool] = Query(False, description="强制使用 AI 模型回答"),
     stream: bool = Query(False, description="是否启用 SSE 心跳流式响应"),
@@ -190,6 +199,7 @@ async def query_question(
         question=question,
         options=options,
         type=type,
+        subject=subject,
         more=more,
         stream=stream,
     )
@@ -212,6 +222,7 @@ async def query_question(
                     query_text,
                     options_list,
                     question_type,
+                    request.subject,
                     bool(request.more),
                     bool(force_ai),
                 ),
@@ -227,6 +238,7 @@ async def query_question(
             query_text,
             options_list,
             question_type,
+            request.subject,
             bool(request.more),
             bool(force_ai),
         )

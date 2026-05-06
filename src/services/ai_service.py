@@ -3,7 +3,7 @@ AI服务 - 基于 LangChain/LangGraph 统一组织和协调多个 AI Agent
 整合原 ai_responder 的所有功能
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from agents.query import query_agent
 from agents.classification import classifier
 from agents.reviewer import reviewer
@@ -23,8 +23,9 @@ class AIService:
     def answer_question(
         self,
         question: str,
-        options: List[str] = None,
+        options: Optional[List[str]] = None,
         question_type: str = "unknown",
+        subject: Optional[str] = None,
         auto_review: bool = False,
     ) -> Dict:
         """
@@ -41,7 +42,10 @@ class AIService:
         """
         # 1. 生成答案
         answer_result = self.query_agent.answer(
-            question=question, options=options, question_type=question_type
+            question=question,
+            options=options,
+            question_type=question_type,
+            subject=subject,
         )
 
         result = {
@@ -57,6 +61,7 @@ class AIService:
                 answer=answer_result["answer"],
                 options=options,
                 question_type=question_type,
+                subject=subject,
             )
 
             result["reviewed"] = True
@@ -69,7 +74,9 @@ class AIService:
 
         return result
 
-    def classify_and_answer(self, question: str, options: List[str] = None) -> Dict:
+    def classify_and_answer(
+        self, question: str, options: List[str] = None, subject: Optional[str] = None
+    ) -> Dict:
         """
         先分类再回答
 
@@ -84,7 +91,9 @@ class AIService:
         categories = classifier.classify(question, options)
 
         # 2. 回答
-        answer_result = self.query_agent.answer(question=question, options=options)
+        answer_result = self.query_agent.answer(
+            question=question, options=options, subject=subject
+        )
 
         return {
             "categories": categories,
@@ -171,7 +180,11 @@ class AIService:
     #     return results
 
     def generate_answer(
-        self, title: str, options: List[str] = None, question_type: str = "unknown"
+        self,
+        title: str,
+        options: List[str] = None,
+        question_type: str = "unknown",
+        subject: str = None,
     ) -> str:
         """
         使用 LLM 生成答案（原 AIResponder.generate_answer）
@@ -180,6 +193,7 @@ class AIService:
             question: 题目内容
             options: 选项列表
             question_type: 题目类型
+            subject: 科目/课程名称
 
         Returns:
             AI 生成的答案字符串
@@ -192,7 +206,10 @@ class AIService:
             options = None
 
         result = self.query_agent.answer(
-            title=title, options=options, question_type=question_type
+            title=title,
+            options=options,
+            question_type=question_type,
+            subject=subject,
         )
         return result
 
@@ -201,7 +218,7 @@ class AIService:
         批量生成答案（原 AIResponder.batch_generate_answers）
 
         Args:
-            questions: 题目列表，每个包含 question、options、type 等字段
+            questions: 题目列表，每个包含 question、options、type、subject 等字段
 
         Returns:
             答案列表
@@ -212,6 +229,7 @@ class AIService:
                 question=q["question"],
                 options=q.get("options"),
                 question_type=q.get("type", "unknown"),
+                subject=q.get("subject", None),
             )
             results.append(result)
         return results

@@ -11,7 +11,6 @@ import logging
 
 from schemas.common import BaseResponse, ErrorResponse
 
-
 # 配置日志
 logging.basicConfig(
     level=logging.DEBUG, format="[%(asctime)s] %(name)s - %(levelname)s: %(message)s"
@@ -118,7 +117,7 @@ def main():
     print("Hello from ai-tiku!")
     import uvicorn, os
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=os.getenv("DEBUG", False))
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=os.getenv("DEBUG", False), reload_dirs="src")
 
 
 if __name__ == "__main__":
