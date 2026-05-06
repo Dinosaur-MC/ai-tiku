@@ -3,11 +3,22 @@ AI服务 - 基于 LangChain/LangGraph 统一组织和协调多个 AI Agent
 整合原 ai_responder 的所有功能
 """
 
-from typing import List, Dict
-from agents.query import query_agent
+from __future__ import annotations
+
+import logging
+import re
+from typing import Dict, List, Optional
+
+from langchain.tools import tool
+
 from agents.classification import classifier
-from agents.reviewer import reviewer
+from agents.query import query_agent
 from agents.rag_chat import rag_chat
+from agents.reviewer import reviewer
+from utils.option_images import build_enhanced_option_text, preprocess_options
+from utils.llm import analyze_images, vision_enabled
+
+logger = logging.getLogger(__name__)
 
 
 class AIService:
@@ -19,6 +30,91 @@ class AIService:
         self.classifier = classifier
         self.reviewer = reviewer
         self.rag_chat = rag_chat
+
+    @staticmethod
+    def _extract_option_label(option_text: str, index: int) -> str:
+        match = re.match(r"^\s*([A-Za-z])(?:[\s\.．、:：\)\]]|$)", option_text or "")
+        if match:
+            return match.group(1).upper()
+        if index < 26:
+            return chr(ord("A") + index)
+        return str(index + 1)
+
+    def _summarize_option_image(self, image_urls: List[str]) -> Optional[str]:
+        if not image_urls or not vision_enabled():
+            return None
+
+        try:
+            summary = analyze_images(
+                "请简要概括该选项图片中的关键信息，仅输出对答题有帮助的中文结果。",
+                image_urls,
+            )
+        except Exception as exc:
+            logger.warning("Option image summarization failed: %s", exc)
+            return None
+
+        summary_text = str(summary).strip()
+        return summary_text or None
+
+    def _build_analyze_option_image_tool(
+        self, option_image_refs: Optional[Dict[str, List[str]]]
+    ):
+        if not option_image_refs or not vision_enabled():
+            return None
+
+        allowed_urls = {
+            url for image_urls in option_image_refs.values() for url in image_urls
+        }
+        if not allowed_urls:
+            return None
+
+        @tool
+        def analyze_option_image(image_url: str) -> str:
+            """分析当前题目选项中的单张图片并返回简洁说明。"""
+            if image_url not in allowed_urls:
+                return "该图片不属于当前题目选项，无法分析。"
+
+            try:
+                analysis = analyze_images(
+                    "请简要概括这张选项图片中的关键信息，仅输出对答题有帮助的中文结果。",
+                    [image_url],
+                )
+            except Exception as exc:
+                logger.warning("Option image tool failed: %s", exc)
+                return f"无法分析该选项图片：{exc}"
+
+            analysis_text = str(analysis).strip()
+            return analysis_text or "未能从该选项图片中提取到有效信息。"
+
+        return analyze_option_image
+
+    def _prepare_query_options(self, options: List[str]):
+        if not options:
+            return options, None, None
+
+        summarizer = self._summarize_option_image if vision_enabled() else None
+        option_payloads = preprocess_options(options, summarizer=summarizer)
+        if not option_payloads:
+            return options, None, None
+
+        enhanced_options = [
+            build_enhanced_option_text(payload) for payload in option_payloads
+        ]
+        option_image_refs = {}
+
+        for index, payload in enumerate(option_payloads):
+            image_urls = list(getattr(payload, "image_urls", []) or [])
+            if not image_urls:
+                continue
+
+            option_text = getattr(payload, "normalized_text", None) or getattr(
+                payload, "raw_option", ""
+            )
+            option_label = self._extract_option_label(option_text, index)
+            option_image_refs[option_label] = image_urls
+
+        image_tool = self._build_analyze_option_image_tool(option_image_refs or None)
+        return enhanced_options, option_image_refs or None, image_tool
 
     def answer_question(
         self,
@@ -39,22 +135,18 @@ class AIService:
         Returns:
             包含答案和相关信息的字典
         """
-        # 1. 生成答案
-        answer_result = self.query_agent.answer(
-            question=question, options=options, question_type=question_type
-        )
+        answer_result = self.generate_answer(question, options, question_type)
 
         result = {
-            "answer": answer_result["answer"],
+            "answer": answer_result,
             "ai_generated": True,
             "reviewed": False,
         }
 
-        # 2. 如果需要，自动复审
         if auto_review:
             review_result = self.reviewer.review(
                 question=question,
-                answer=answer_result["answer"],
+                answer=answer_result,
                 options=options,
                 question_type=question_type,
             )
@@ -62,7 +154,6 @@ class AIService:
             result["reviewed"] = True
             result["review_result"] = review_result
 
-            # 如果复审认为需要修正，使用修正后的答案
             if review_result.get("corrected_answer"):
                 result["answer"] = review_result["corrected_answer"]
                 result["was_corrected"] = True
@@ -80,62 +171,14 @@ class AIService:
         Returns:
             包含分类结果和答案的字典
         """
-        # 1. 分类
-        categories = classifier.classify(question, options)
-
-        # 2. 回答
-        answer_result = self.query_agent.answer(question=question, options=options)
+        categories = self.classifier.classify(question, options)
+        answer_result = self.generate_answer(question, options)
 
         return {
             "categories": categories,
-            "answer": answer_result["answer"],
+            "answer": answer_result,
             "ai_generated": True,
         }
-
-    # def full_process(
-    #     self, question: str, options: List[str] = None, question_type: str = "unknown"
-    # ) -> Dict:
-    #     """
-    #     完整流程：分类 -> 回答 -> 复审
-
-    #     Args:
-    #         question: 题目内容
-    #         options: 选项列表
-    #         question_type: 题目类型
-
-    #     Returns:
-    #         包含所有处理结果的字典
-    #     """
-    #     # 1. 分类
-    #     categories = classifier.classify(question, options)
-
-    #     # 2. 回答
-    #     answer_result = self.query_agent.answer(
-    #         question=question, options=options, question_type=question_type
-    #     )
-
-    #     # 3. 复审
-    #     review_result = self.reviewer.review(
-    #         question=question,
-    #         answer=answer_result["answer"],
-    #         options=options,
-    #         question_type=question_type,
-    #     )
-
-    #     # 4. 整合结果
-    #     final_answer = review_result.get("corrected_answer") or answer_result["answer"]
-
-    #     return {
-    #         "categories": categories,
-    #         "original_answer": answer_result["answer"],
-    #         "final_answer": final_answer,
-    #         "review_result": review_result,
-    #         "was_corrected": review_result.get("corrected_answer") is not None,
-    #         "statistics": {
-    #             "query_stats": self.query_agent.get_statistics(),
-    #             "review_stats": self.reviewer.get_review_statistics(),
-    #         },
-    #     }
 
     def chat(self, query: str, use_history: bool = True) -> Dict:
         """
@@ -149,26 +192,6 @@ class AIService:
             包含回答和上下文的字典
         """
         return self.rag_chat.chat(query, use_history)
-
-    # def batch_process(self, questions: List[Dict]) -> List[Dict]:
-    #     """
-    #     批量处理题目
-
-    #     Args:
-    #         questions: 题目列表，每个包含 question、options、type 等字段
-
-    #     Returns:
-    #         处理结果列表
-    #     """
-    #     results = []
-    #     for q in questions:
-    #         result = self.full_process(
-    #             question=q["question"],
-    #             options=q.get("options"),
-    #             question_type=q.get("type", "unknown"),
-    #         )
-    #         results.append(result)
-    #     return results
 
     def generate_answer(
         self, title: str, options: List[str] = None, question_type: str = "unknown"
@@ -191,12 +214,20 @@ class AIService:
         if question_type in ["judgement", "completion", "essay"]:
             options = None
 
-        result = self.query_agent.answer(
-            title=title, options=options, question_type=question_type
-        )
-        return result
+        option_image_refs = None
+        image_tool = None
+        if options:
+            options, option_image_refs, image_tool = self._prepare_query_options(options)
 
-    def batch_generate_answers(self, questions: List[dict]) -> List[dict]:
+        return self.query_agent.answer(
+            title=title,
+            options=options,
+            question_type=question_type,
+            option_image_refs=option_image_refs,
+            image_tool=image_tool,
+        )
+
+    def batch_generate_answers(self, questions: List[dict]) -> List[str]:
         """
         批量生成答案（原 AIResponder.batch_generate_answers）
 
@@ -208,8 +239,8 @@ class AIService:
         """
         results = []
         for q in questions:
-            result = self.query_agent.answer(
-                question=q["question"],
+            result = self.generate_answer(
+                title=q["question"],
                 options=q.get("options"),
                 question_type=q.get("type", "unknown"),
             )
@@ -217,5 +248,4 @@ class AIService:
         return results
 
 
-# 单例模式
 ai_service = AIService()

@@ -46,8 +46,15 @@ async def query_question(
     - `title`、`q`、`question` 三个字段至少提供一个，最终只会采用其中一个（优先级：`title` > `q` > `question`）
     - `more` 参数已禁用，保留仅用于兼容旧版本
     """
-    # 构建查询请求
-    query_text = title or q or question
+    request = QueryRequest(
+        title=title,
+        q=q,
+        question=question,
+        options=options,
+        type=type,
+        more=more,
+    )
+    query_text = request.get_question_text()
 
     if not query_text:
         raise HTTPException(
@@ -55,16 +62,12 @@ async def query_question(
             detail="请提供题目内容（title、q 或 question 至少一个）",
         )
 
-    # 解析选项
-    options_list = None
-    if options:
-        options_list = [opt.strip() for opt in options.split("\n") if opt.strip()]
+    options_list = request.get_options_list()
+    question_type = request.type or "unknown"
 
     try:
-        # 执行查询
         result = None
 
-        # 1. 首先尝试向量相似度搜索（除非强制使用 AI）
         if not force_ai:
             similar_results = question_service.search_similar_questions(
                 query=query_text,
@@ -82,10 +85,9 @@ async def query_question(
                     "similar_results": similar_results,
                 }
 
-        # 2. 未找到相似题目或强制使用 AI，使用 LLM 生成答案
         if result is None:
             ai_answer = ai_service.generate_answer(
-                query_text, options_list, type or "unknown"
+                query_text, options_list, question_type
             )
             result = {
                 "found": True,
@@ -95,9 +97,7 @@ async def query_question(
                 "similar_results": [],
             }
 
-        # 构建响应
         if not more:
-            # 单条结果模式
             if result.get("found") and result.get("answer"):
                 response_data = SingleResultData(
                     question=result.get("question", query_text),
@@ -107,7 +107,6 @@ async def query_question(
                 )
                 return QueryResponse(code=1, message="请求成功", data=response_data)
             else:
-                # 未找到答案
                 response_data = SingleResultData(
                     question="未找到答案！",
                     answer="很抱歉，题目搜索不到。",
@@ -116,7 +115,6 @@ async def query_question(
                 )
                 return QueryResponse(code=0, message="请求失败", data=response_data)
         else:
-            # 多条结果模式（保留兼容）
             results = result.get("similar_results", [])
             items = [
                 MultiResultItem(

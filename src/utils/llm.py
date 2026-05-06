@@ -56,12 +56,23 @@ class EmbeddingConfig(BaseModel):
     api_key: Optional[str] = None
 
 
+class VisionConfig(BaseModel):
+    """Vision 模型配置"""
+
+    provider: Literal["openai_compatible"]
+    model: str
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    temperature: float
+
+
 class LLMSettings(BaseModel):
     """按能力划分的 LLM 配置"""
 
     chat: ChatConfig
     completion: CompletionConfig
     embedding: EmbeddingConfig
+    vision: Optional[VisionConfig] = None
 
 
 def _read_temperature(name: str, default: float) -> float:
@@ -87,6 +98,22 @@ def _read_provider_model(prefix: str, default_model: str) -> tuple[str, str]:
     return provider, model or default_model
 
 
+def _read_optional_vision_config(default_temperature: float) -> Optional[VisionConfig]:
+    provider = os.environ.get("VISION_PROVIDER")
+    if not provider:
+        return None
+    if provider != "openai_compatible":
+        raise ValueError(f"unsupported VISION_PROVIDER '{provider}'")
+
+    return VisionConfig(
+        provider=provider,
+        model=_require(os.environ.get("VISION_MODEL"), "VISION_MODEL", provider),
+        base_url=os.environ.get("VISION_BASE_URL"),
+        api_key=os.environ.get("VISION_API_KEY"),
+        temperature=_read_temperature("VISION_TEMPERATURE", default_temperature),
+    )
+
+
 def _validate_provider_config(prefix: str, config: BaseModel) -> None:
     provider = getattr(config, "provider")
     if provider == "openai_compatible":
@@ -105,6 +132,7 @@ def get_llm_settings() -> LLMSettings:
     embedding_provider, embedding_model = _read_provider_model(
         "EMBEDDING", "nomic-embed-text"
     )
+    vision_config = _read_optional_vision_config(default_temperature)
     settings = LLMSettings(
         chat=ChatConfig(
             provider=chat_provider,
@@ -128,10 +156,13 @@ def get_llm_settings() -> LLMSettings:
             base_url=os.environ.get("EMBEDDING_BASE_URL"),
             api_key=os.environ.get("EMBEDDING_API_KEY"),
         ),
+        vision=vision_config,
     )
     _validate_provider_config("CHAT", settings.chat)
     _validate_provider_config("COMPLETION", settings.completion)
     _validate_provider_config("EMBEDDING", settings.embedding)
+    if settings.vision is not None:
+        _validate_provider_config("VISION", settings.vision)
     return settings
 
 
@@ -155,6 +186,34 @@ class OpenAICompatibleCompletionAdapter:
 
     async def ainvoke(self, prompt: str, **kwargs) -> str:
         response = await self.client.ainvoke([HumanMessage(content=prompt)], **kwargs)
+        return self._as_text(response)
+
+
+class OpenAICompatibleVisionAdapter:
+    def __init__(self, client: ChatOpenAI):
+        self.client = client
+
+    @staticmethod
+    def _as_text(response) -> str:
+        content = getattr(response, "content", response)
+        return content if isinstance(content, str) else str(content)
+
+    def invoke(self, prompt: str, image_urls: List[str], **kwargs) -> str:
+        content = [{"type": "text", "text": prompt}]
+        content.extend(
+            {"type": "image_url", "image_url": {"url": image_url}}
+            for image_url in image_urls
+        )
+        response = self.client.invoke([HumanMessage(content=content)], **kwargs)
+        return self._as_text(response)
+
+    async def ainvoke(self, prompt: str, image_urls: List[str], **kwargs) -> str:
+        content = [{"type": "text", "text": prompt}]
+        content.extend(
+            {"type": "image_url", "image_url": {"url": image_url}}
+            for image_url in image_urls
+        )
+        response = await self.client.ainvoke([HumanMessage(content=content)], **kwargs)
         return self._as_text(response)
 
 
@@ -205,9 +264,32 @@ def build_embedding_model(config: EmbeddingConfig):
     )
 
 
+def build_vision_model(config: VisionConfig):
+    return OpenAICompatibleVisionAdapter(
+        ChatOpenAI(
+            model=config.model,
+            temperature=config.temperature,
+            base_url=config.base_url,
+            api_key=config.api_key,
+        )
+    )
+
+
 chat = build_chat_model(settings.chat)
 completion = build_completion_model(settings.completion)
 embedder = build_embedding_model(settings.embedding)
+vision = build_vision_model(settings.vision) if settings.vision is not None else None
+
+
+def vision_enabled() -> bool:
+    return vision is not None
+
+
+def analyze_images(prompt: str, image_urls: List[str], **kwargs) -> str:
+    if vision is None:
+        raise ValueError("vision model is not configured")
+    return vision.invoke(prompt, image_urls, **kwargs)
+
 
 # ==================== Agent Factory ====================
 
