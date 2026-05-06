@@ -58,12 +58,23 @@ class EmbeddingConfig(BaseModel):
     api_key: Optional[str] = None
 
 
+class VisionConfig(BaseModel):
+    """Vision 模型配置"""
+
+    provider: Literal["openai_compatible"]
+    model: str
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    temperature: float
+
+
 class LLMSettings(BaseModel):
     """按能力划分的 LLM 配置"""
 
     chat: ChatConfig
     completion: CompletionConfig
     embedding: EmbeddingConfig
+    vision: Optional[VisionConfig] = None
 
 
 def _read_temperature(name: str, default: float) -> float:
@@ -87,6 +98,22 @@ def _read_provider_model(prefix: str, default_model: str) -> tuple[str, str]:
         return provider, _require(model, f"{prefix}_MODEL", provider)
 
     return provider, model or default_model
+
+
+def _read_optional_vision_config(default_temperature: float) -> Optional[VisionConfig]:
+    provider = os.environ.get("VISION_PROVIDER")
+    if not provider:
+        return None
+    if provider != "openai_compatible":
+        raise ValueError(f"unsupported VISION_PROVIDER '{provider}'")
+
+    return VisionConfig(
+        provider=provider,
+        model=_require(os.environ.get("VISION_MODEL"), "VISION_MODEL", provider),
+        base_url=os.environ.get("VISION_BASE_URL"),
+        api_key=os.environ.get("VISION_API_KEY"),
+        temperature=_read_temperature("VISION_TEMPERATURE", default_temperature),
+    )
 
 
 def _validate_provider_config(prefix: str, config: BaseModel) -> None:
@@ -166,6 +193,7 @@ def get_llm_settings() -> LLMSettings:
     embedding_provider, embedding_model = _read_provider_model(
         "EMBEDDING", "nomic-embed-text"
     )
+    vision_config = _read_optional_vision_config(default_temperature)
     settings = LLMSettings(
         chat=ChatConfig(
             provider=chat_provider,
@@ -189,10 +217,13 @@ def get_llm_settings() -> LLMSettings:
             base_url=os.environ.get("EMBEDDING_BASE_URL"),
             api_key=os.environ.get("EMBEDDING_API_KEY"),
         ),
+        vision=vision_config,
     )
     _validate_provider_config("CHAT", settings.chat)
     _validate_provider_config("COMPLETION", settings.completion)
     _validate_provider_config("EMBEDDING", settings.embedding)
+    if settings.vision is not None:
+        _validate_provider_config("VISION", settings.vision)
     return settings
 
 
@@ -280,6 +311,34 @@ class RetryingCompletionModel:
         return getattr(self.client, name)
 
 
+class OpenAICompatibleVisionAdapter:
+    def __init__(self, client: ChatOpenAI):
+        self.client = client
+
+    @staticmethod
+    def _as_text(response) -> str:
+        content = getattr(response, "content", response)
+        return content if isinstance(content, str) else str(content)
+
+    def invoke(self, prompt: str, image_urls: List[str], **kwargs) -> str:
+        content = [{"type": "text", "text": prompt}]
+        content.extend(
+            {"type": "image_url", "image_url": {"url": image_url}}
+            for image_url in image_urls
+        )
+        response = self.client.invoke([HumanMessage(content=content)], **kwargs)
+        return self._as_text(response)
+
+    async def ainvoke(self, prompt: str, image_urls: List[str], **kwargs) -> str:
+        content = [{"type": "text", "text": prompt}]
+        content.extend(
+            {"type": "image_url", "image_url": {"url": image_url}}
+            for image_url in image_urls
+        )
+        response = await self.client.ainvoke([HumanMessage(content=content)], **kwargs)
+        return self._as_text(response)
+
+
 def build_chat_model(config: ChatConfig):
     if config.provider == "ollama":
         client = ChatOllama(
@@ -335,9 +394,32 @@ def build_embedding_model(config: EmbeddingConfig):
     return RetryingEmbeddings(client)
 
 
+def build_vision_model(config: VisionConfig):
+    return OpenAICompatibleVisionAdapter(
+        ChatOpenAI(
+            model=config.model,
+            temperature=config.temperature,
+            base_url=config.base_url,
+            api_key=config.api_key,
+        )
+    )
+
+
 chat = build_chat_model(settings.chat)
 completion = build_completion_model(settings.completion)
 embedder = build_embedding_model(settings.embedding)
+vision = build_vision_model(settings.vision) if settings.vision is not None else None
+
+
+def vision_enabled() -> bool:
+    return vision is not None
+
+
+def analyze_images(prompt: str, image_urls: List[str], **kwargs) -> str:
+    if vision is None:
+        raise ValueError("vision model is not configured")
+    return vision.invoke(prompt, image_urls, **kwargs)
+
 
 # ==================== Agent Factory ====================
 
@@ -380,21 +462,17 @@ def create_graph_agent(
     """
     workflow = StateGraph(MessagesState)
 
-    # 添加节点
     for name, func in nodes.items():
         workflow.add_node(name, func)
 
-    # 添加入口边
     workflow.add_edge(START, entry_point)
 
-    # 添加普通边
     for from_node, to_node in edges:
         if to_node == END:
             workflow.add_edge(from_node, END)
         else:
             workflow.add_edge(from_node, to_node)
 
-    # 添加条件边
     if conditional_edges:
         for from_node, condition_func, mapping in conditional_edges:
             workflow.add_conditional_edges(from_node, condition_func, mapping)
@@ -479,15 +557,12 @@ async def ainvoke_llm(
     Raises:
         TimeoutError: 超过指定时间未返回结果
     """
-    import asyncio
-
     messages = []
     if system_prompt:
         messages.append(SystemMessage(content=system_prompt))
     messages.append(HumanMessage(content=prompt))
 
     try:
-        # 使用 asyncio.wait_for 实现异步超时
         if timeout is not None:
             response = await asyncio.wait_for(
                 chat.ainvoke(messages, **kwargs), timeout=timeout
@@ -533,10 +608,8 @@ async def astream_llm(
 # ==================== 测试代码 ====================
 
 if __name__ == "__main__":
-    import asyncio
     import sys
 
-    # Windows 特定：设置 Selector 事件循环以避免 Proactor 清理问题
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
@@ -545,19 +618,16 @@ if __name__ == "__main__":
         print("测试 LLM 模块")
         print("=" * 60)
 
-        # 测试 1: 简单调用
         print("\n【测试 1】简单调用:")
         result = invoke_llm("中国梦是什么？")
         print(f"结果：{result}")
 
-        # 测试 2: 流式调用
         print("\n【测试 2】流式调用:")
         print("回答：", end="", flush=True)
         for chunk in stream_llm("简要介绍马克思主义"):
             print(chunk, end="", flush=True)
         print()
 
-        # 测试 3: 带系统提示词
         print("\n【测试 3】带系统提示词:")
         result = invoke_llm(
             "谁是矛盾论的作者？",
@@ -565,13 +635,11 @@ if __name__ == "__main__":
         )
         print(f"结果：{result}")
 
-        # 测试 4: 创建简单 Agent
         print("\n【测试 4】创建简单 Agent:")
         agent = create_agent(model=chat)
         result = agent.invoke({"messages": [HumanMessage(content="你好")]})
         print(f"Agent 响应：{result['messages'][-1].content}")
 
-        # 测试 5: 创建带工具的 Agent
         print("\n【测试 5】创建带工具的 Agent:")
 
         @tool
@@ -581,16 +649,16 @@ if __name__ == "__main__":
             return (
                 f"搜索'{query}'的结果:"
                 + """### 人工智能（AI）是指计算机系统执行通常与人类智慧相关的任务的能力
-                
-人工智能（AI）是指计算机系统执行通常与人类智慧相关的任务的能力，例如学习、推理、解决问题、感知和决策。人工智能是计算机科学的一个研究领域，致力于开发和研究使机器能够感知其环境并利用学习和智能采取行动以最大限度地提高其实现既定目标的可能性的方法和软件。 
 
-人工智能的发展历程可以追溯到20世纪50年代，当时科学家们开始探索如何让计算机模拟人类的思维过程。经过几十年的努力，AI经历了从符号主义到连接主义的转变，从专家系统到机器学习的飞跃。 
+人工智能（AI）是指计算机系统执行通常与人类智慧相关的任务的能力，例如学习、推理、解决问题、感知和决策。人工智能是计算机科学的一个研究领域，致力于开发和研究使机器能够感知其环境并利用学习和智能采取行动以最大限度地提高其实现既定目标的可能性的方法和软件。
 
-人工智能的核心特性包括学习能力、推理能力、感知能力、自主决策能力等。这些特性使得AI系统能够从大量数据中提取有用信息，不断优化自身的性能，并在复杂多变的环境中自主决策、优化性能并创造价值。 
+人工智能的发展历程可以追溯到20世纪50年代，当时科学家们开始探索如何让计算机模拟人类的思维过程。经过几十年的努力，AI经历了从符号主义到连接主义的转变，从专家系统到机器学习的飞跃。
 
-人工智能的应用领域广泛，包括医疗、金融、教育、交通、制造业等。AI在医疗领域中，能够通过数据分析以及演算方式等对患者的病情、诊断和治疗方案等做出准确判断，让医生做出更好的医疗决策，提高患者的生存率。 
+人工智能的核心特性包括学习能力、推理能力、感知能力、自主决策能力等。这些特性使得AI系统能够从大量数据中提取有用信息，不断优化自身的性能，并在复杂多变的环境中自主决策、优化性能并创造价值。
 
-人工智能的普及和应用将进一步推动经济的发展。在日益激烈的现代经济环境中，企业需要提高效率并降低成本，AI可提高企业的竞争力和经济效益，推动全球经济更好、更快速的发展。 
+人工智能的应用领域广泛，包括医疗、金融、教育、交通、制造业等。AI在医疗领域中，能够通过数据分析以及演算方式等对患者的病情、诊断和治疗方案等做出准确判断，让医生做出更好的医疗决策，提高患者的生存率。
+
+人工智能的普及和应用将进一步推动经济的发展。在日益激烈的现代经济环境中，企业需要提高效率并降低成本，AI可提高企业的竞争力和经济效益，推动全球经济更好、更快速的发展。
 
 总的来说，人工智能是一种富有活力的技术，越来越多地渗透到人类社会各个领域，提高人类生活质量，推动科技发展和经济进步，都具有十分重要的作用。"""
             )
@@ -601,7 +669,6 @@ if __name__ == "__main__":
         )
         print(f"Agent with tools 响应：{result['messages'][-1].content}")
 
-        # 测试 6: 异步调用
         print("\n【测试 6】异步调用:")
         result = await ainvoke_llm("用一句话总结量子力学")
         print(f"结果：{result}")

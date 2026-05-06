@@ -46,19 +46,24 @@ class FakeOllamaLLM:
 class FakeChatOpenAI:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
+        self.invocations = []
 
     def invoke(self, messages, **kwargs):
+        self.invocations.append(("invoke", messages, kwargs))
         return SimpleNamespace(content="fake-openai-chat")
 
     async def ainvoke(self, messages, **kwargs):
+        self.invocations.append(("ainvoke", messages, kwargs))
         return SimpleNamespace(content="fake-openai-chat-async")
 
     def stream(self, messages, **kwargs):
+        self.invocations.append(("stream", messages, kwargs))
         yield SimpleNamespace(content="fake-")
         yield SimpleNamespace(content="openai-")
         yield SimpleNamespace(content="stream")
 
     async def astream(self, messages, **kwargs):
+        self.invocations.append(("astream", messages, kwargs))
         for value in ["fake-", "openai-", "astream"]:
             yield SimpleNamespace(content=value)
 
@@ -85,6 +90,11 @@ def reload_llm(monkeypatch, env):
         "EMBEDDING_MODEL",
         "EMBEDDING_BASE_URL",
         "EMBEDDING_API_KEY",
+        "VISION_PROVIDER",
+        "VISION_MODEL",
+        "VISION_BASE_URL",
+        "VISION_API_KEY",
+        "VISION_TEMPERATURE",
     ]
     for key in keys:
         monkeypatch.delenv(key, raising=False)
@@ -381,6 +391,115 @@ def test_stream_llm_yields_chat_chunks(monkeypatch):
     )
 
     assert "".join(llm.stream_llm("你好")) == "fake-ollama-stream"
+
+
+def test_vision_settings_load_when_fully_configured(monkeypatch):
+    llm = reload_llm(
+        monkeypatch,
+        {
+            "CHAT_PROVIDER": "ollama",
+            "CHAT_MODEL": "qwen3.5:2b",
+            "COMPLETION_PROVIDER": "ollama",
+            "COMPLETION_MODEL": "qwen3.5:2b",
+            "EMBEDDING_PROVIDER": "ollama",
+            "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+            "VISION_PROVIDER": "openai_compatible",
+            "VISION_MODEL": "gpt-4.1-mini",
+            "VISION_BASE_URL": "https://vision.example.test/v1",
+            "VISION_API_KEY": "sk-vision",
+            "VISION_TEMPERATURE": "0.4",
+        },
+    )
+
+    assert llm.settings.vision is not None
+    assert llm.settings.vision.provider == "openai_compatible"
+    assert llm.settings.vision.model == "gpt-4.1-mini"
+    assert llm.settings.vision.base_url == "https://vision.example.test/v1"
+    assert llm.settings.vision.api_key == "sk-vision"
+    assert llm.settings.vision.temperature == 0.4
+    assert llm.vision_enabled() is True
+    assert llm.vision is not None
+
+
+def test_vision_disabled_when_provider_not_set(monkeypatch):
+    llm = reload_llm(
+        monkeypatch,
+        {
+            "CHAT_PROVIDER": "ollama",
+            "CHAT_MODEL": "qwen3.5:2b",
+            "COMPLETION_PROVIDER": "ollama",
+            "COMPLETION_MODEL": "qwen3.5:2b",
+            "EMBEDDING_PROVIDER": "ollama",
+            "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+        },
+    )
+
+    assert llm.settings.vision is None
+    assert llm.vision is None
+    assert llm.vision_enabled() is False
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    ["VISION_MODEL", "VISION_BASE_URL", "VISION_API_KEY"],
+)
+def test_incomplete_openai_compatible_vision_config_raises_value_error(
+    monkeypatch, missing_key
+):
+    env = {
+        "CHAT_PROVIDER": "ollama",
+        "CHAT_MODEL": "qwen3.5:2b",
+        "COMPLETION_PROVIDER": "ollama",
+        "COMPLETION_MODEL": "qwen3.5:2b",
+        "EMBEDDING_PROVIDER": "ollama",
+        "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+        "VISION_PROVIDER": "openai_compatible",
+        "VISION_MODEL": "gpt-4.1-mini",
+        "VISION_BASE_URL": "https://vision.example.test/v1",
+        "VISION_API_KEY": "sk-vision",
+    }
+    env.pop(missing_key)
+
+    with pytest.raises(ValueError, match=missing_key):
+        reload_llm(monkeypatch, env)
+
+
+def test_openai_compatible_vision_adapter_sends_image_content_blocks(monkeypatch):
+    llm = reload_llm(
+        monkeypatch,
+        {
+            "CHAT_PROVIDER": "ollama",
+            "CHAT_MODEL": "qwen3.5:2b",
+            "COMPLETION_PROVIDER": "ollama",
+            "COMPLETION_MODEL": "qwen3.5:2b",
+            "EMBEDDING_PROVIDER": "ollama",
+            "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+            "VISION_PROVIDER": "openai_compatible",
+            "VISION_MODEL": "gpt-4.1-mini",
+            "VISION_BASE_URL": "https://vision.example.test/v1",
+            "VISION_API_KEY": "sk-vision",
+        },
+    )
+
+    assert llm.analyze_images(
+        "请描述图片内容",
+        ["https://cdn.example.test/1.png", "https://cdn.example.test/2.png"],
+    ) == "fake-openai-chat"
+
+    method, messages, kwargs = llm.vision.client.invocations[0]
+    assert method == "invoke"
+    assert kwargs == {}
+    assert messages[0].content == [
+        {"type": "text", "text": "请描述图片内容"},
+        {
+            "type": "image_url",
+            "image_url": {"url": "https://cdn.example.test/1.png"},
+        },
+        {
+            "type": "image_url",
+            "image_url": {"url": "https://cdn.example.test/2.png"},
+        },
+    ]
 
 
 @pytest.mark.asyncio
