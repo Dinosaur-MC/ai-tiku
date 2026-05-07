@@ -35,12 +35,24 @@ class FakeChatOllama:
 class FakeOllamaLLM:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
+        self.bound_invocations = []
 
     def invoke(self, prompt, **kwargs):
         return "fake-ollama-completion"
 
     async def ainvoke(self, prompt, **kwargs):
         return "fake-ollama-completion-async"
+
+    def bind(self, **kwargs):
+        parent = self
+        images = kwargs.get("images", [])
+
+        class BoundModel:
+            def invoke(self, prompt, **invoke_kwargs):
+                parent.bound_invocations.append((prompt, images, invoke_kwargs))
+                return "fake-ollama-completion"
+
+        return BoundModel()
 
 
 class FakeChatOpenAI:
@@ -500,6 +512,113 @@ def test_openai_compatible_vision_adapter_sends_image_content_blocks(monkeypatch
             "image_url": {"url": "https://cdn.example.test/2.png"},
         },
     ]
+
+
+def test_vision_settings_load_for_ollama_without_api_key(monkeypatch):
+    llm = reload_llm(
+        monkeypatch,
+        {
+            "CHAT_PROVIDER": "ollama",
+            "CHAT_MODEL": "qwen3.5:2b",
+            "COMPLETION_PROVIDER": "ollama",
+            "COMPLETION_MODEL": "qwen3.5:2b",
+            "EMBEDDING_PROVIDER": "ollama",
+            "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+            "VISION_PROVIDER": "ollama",
+            "VISION_MODEL": "llava:7b",
+            "VISION_BASE_URL": "http://localhost:11434",
+        },
+    )
+
+    assert llm.settings.vision is not None
+    assert llm.settings.vision.provider == "ollama"
+    assert llm.settings.vision.model == "llava:7b"
+    assert llm.settings.vision.base_url == "http://localhost:11434"
+    assert llm.settings.vision.api_key is None
+    assert llm.vision_enabled() is True
+
+
+def test_vision_provider_ollama_requires_model(monkeypatch):
+    with pytest.raises(ValueError, match="VISION_MODEL"):
+        reload_llm(
+            monkeypatch,
+            {
+                "CHAT_PROVIDER": "ollama",
+                "CHAT_MODEL": "qwen3.5:2b",
+                "COMPLETION_PROVIDER": "ollama",
+                "COMPLETION_MODEL": "qwen3.5:2b",
+                "EMBEDDING_PROVIDER": "ollama",
+                "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+                "VISION_PROVIDER": "ollama",
+            },
+        )
+
+
+def test_vision_provider_rejects_unknown_value(monkeypatch):
+    with pytest.raises(ValueError, match="unsupported VISION_PROVIDER"):
+        reload_llm(
+            monkeypatch,
+            {
+                "CHAT_PROVIDER": "ollama",
+                "CHAT_MODEL": "qwen3.5:2b",
+                "COMPLETION_PROVIDER": "ollama",
+                "COMPLETION_MODEL": "qwen3.5:2b",
+                "EMBEDDING_PROVIDER": "ollama",
+                "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+                "VISION_PROVIDER": "unknown_provider",
+                "VISION_MODEL": "x",
+            },
+        )
+
+
+def test_builds_ollama_vision_adapter(monkeypatch):
+    llm = reload_llm(
+        monkeypatch,
+        {
+            "CHAT_PROVIDER": "ollama",
+            "CHAT_MODEL": "qwen3.5:2b",
+            "COMPLETION_PROVIDER": "ollama",
+            "COMPLETION_MODEL": "qwen3.5:2b",
+            "EMBEDDING_PROVIDER": "ollama",
+            "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+            "VISION_PROVIDER": "ollama",
+            "VISION_MODEL": "llava:7b",
+        },
+    )
+
+    assert llm.vision is not None
+    assert llm.vision.__class__.__name__ == "OllamaVisionAdapter"
+
+
+def test_ollama_vision_adapter_prefers_remote_urls(monkeypatch):
+    llm = reload_llm(
+        monkeypatch,
+        {
+            "CHAT_PROVIDER": "ollama",
+            "CHAT_MODEL": "qwen3.5:2b",
+            "COMPLETION_PROVIDER": "ollama",
+            "COMPLETION_MODEL": "qwen3.5:2b",
+            "EMBEDDING_PROVIDER": "ollama",
+            "EMBEDDING_MODEL": "qwen3-embedding:0.6b",
+            "VISION_PROVIDER": "ollama",
+            "VISION_MODEL": "llava:7b",
+        },
+    )
+
+    monkeypatch.setattr(
+        llm,
+        "prepare_ollama_image_inputs",
+        lambda image_urls, raw_images=None, allow_remote_urls=True: [
+            SimpleNamespace(kind="url", value=image_urls[0])
+        ],
+    )
+
+    assert llm.analyze_images("describe", ["https://img.test/a.png"]) == "fake-ollama-completion"
+    assert llm.vision.client.kwargs["model"] == "llava:7b"
+    prompt, images, kwargs = llm.vision.client.bound_invocations[0]
+    assert prompt == "describe"
+    assert images == ["https://img.test/a.png"]
+    assert kwargs == {}
 
 
 @pytest.mark.asyncio

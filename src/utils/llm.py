@@ -20,6 +20,7 @@ from langchain_ollama import ChatOllama, OllamaEmbeddings, OllamaLLM
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langgraph.graph import END, START, MessagesState, StateGraph
 from pydantic import BaseModel
+from utils.vision_inputs import prepare_ollama_image_inputs
 
 logger = getLogger(__name__)
 
@@ -61,7 +62,7 @@ class EmbeddingConfig(BaseModel):
 class VisionConfig(BaseModel):
     """Vision 模型配置"""
 
-    provider: Literal["openai_compatible"]
+    provider: ProviderName
     model: str
     base_url: Optional[str] = None
     api_key: Optional[str] = None
@@ -104,7 +105,7 @@ def _read_optional_vision_config(default_temperature: float) -> Optional[VisionC
     provider = os.environ.get("VISION_PROVIDER")
     if not provider:
         return None
-    if provider != "openai_compatible":
+    if provider not in {"ollama", "openai_compatible"}:
         raise ValueError(f"unsupported VISION_PROVIDER '{provider}'")
 
     return VisionConfig(
@@ -311,6 +312,20 @@ class RetryingCompletionModel:
         return getattr(self.client, name)
 
 
+class OllamaVisionAdapter:
+    def __init__(self, client: OllamaLLM):
+        self.client = client
+
+    def invoke(self, prompt: str, image_urls: List[str], **kwargs) -> str:
+        prepared = prepare_ollama_image_inputs(
+            image_urls,
+            allow_remote_urls=True,
+        )
+        images = [item.value for item in prepared]
+        bound = self.client.bind(images=images)
+        return str(bound.invoke(prompt, **kwargs))
+
+
 class OpenAICompatibleVisionAdapter:
     def __init__(self, client: ChatOpenAI):
         self.client = client
@@ -395,6 +410,16 @@ def build_embedding_model(config: EmbeddingConfig):
 
 
 def build_vision_model(config: VisionConfig):
+    if config.provider == "ollama":
+        return OllamaVisionAdapter(
+            OllamaLLM(
+                model=config.model,
+                temperature=config.temperature,
+                base_url=config.base_url,
+                reasoning=False,
+            )
+        )
+
     return OpenAICompatibleVisionAdapter(
         ChatOpenAI(
             model=config.model,
