@@ -138,7 +138,7 @@ cp .env.example .env
 - `ollama`
 - `openai_compatible`
 
-按能力分别配置 `CHAT_*`、`COMPLETION_*`、`EMBEDDING_*` 环境变量：
+按能力分别配置 `CHAT_*`、`COMPLETION_*`、`EMBEDDING_*`、`VISION_*` 环境变量：
 
 ```bash
 # Chat provider
@@ -160,7 +160,19 @@ EMBEDDING_PROVIDER=ollama
 EMBEDDING_MODEL=nomic-embed-text
 EMBEDDING_BASE_URL=http://localhost:11434
 EMBEDDING_API_KEY=
+
+# Optional vision provider
+VISION_PROVIDER=ollama
+VISION_MODEL=llava:7b
+VISION_BASE_URL=http://localhost:11434
+VISION_API_KEY=
+VISION_TEMPERATURE=0.1
 ```
+
+视觉能力说明：
+- `VISION_PROVIDER=openai_compatible` 时需要显式配置 `VISION_MODEL`、`VISION_BASE_URL`、`VISION_API_KEY`
+- `VISION_PROVIDER=ollama` 时需要 `VISION_MODEL`，`VISION_API_KEY` 可留空
+- 上层统一通过 `analyze_images(prompt, image_urls)` 调用视觉能力，因此业务层不需要区分 provider
 
 混合 provider 配置示例：
 
@@ -236,6 +248,14 @@ python src/main.py
 - `stream=true` 时返回 `text/event-stream`
 - 查询处理中每 15 秒发送一次 `heartbeat` 事件
 - 最后一条 `result` 事件包含完整 JSON 结果，结构与普通查询响应一致
+
+#### 选项图片说明
+
+当 `options` 中包含图片 URL 时：
+- 系统会先提取并归一化图片链接（包括去重、清理拼接/包裹噪音）
+- 如果已启用 `VISION_PROVIDER`，会对图片做基础理解并把结果注入选项文本
+- 对于图片型选项，查询 Agent 还能按需调用图片分析工具做二次查看
+- 如果视觉能力不可用或图片解析失败，请求不会中断，而是降级为“文本 + 原始 URL”继续答题
 
 #### 示例请求
 

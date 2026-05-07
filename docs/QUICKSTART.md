@@ -1,6 +1,6 @@
 # AI-Tiku 快速入门指南
 
-欢迎使用 AI-Tiku 智能题库答题系统！本指南将帮助您快速上手。
+欢迎使用 AI-Tiku 智能题库答题系统！本指南将帮助您快速上手当前版本。
 
 ## 📦 安装步骤
 
@@ -9,7 +9,7 @@
 **方式一：使用 uv（推荐）**
 
 ```bash
-uv install
+uv sync
 ```
 
 **方式二：使用 pip**
@@ -18,9 +18,46 @@ uv install
 pip install -r requirements.txt
 ```
 
-### 2. 配置 Ollama
+### 2. 配置模型与环境变量
 
-确保已安装 Ollama，并下载所需模型：
+复制配置文件：
+
+```bash
+cp .env.example .env
+```
+
+最小 Ollama 本地配置示例：
+
+```bash
+MODEL_TEMPERATURE=0.1
+
+CHAT_PROVIDER=ollama
+CHAT_MODEL=qwen3.5:2b
+CHAT_BASE_URL=http://localhost:11434
+CHAT_API_KEY=
+CHAT_TEMPERATURE=0.1
+
+COMPLETION_PROVIDER=ollama
+COMPLETION_MODEL=qwen3.5:2b
+COMPLETION_BASE_URL=http://localhost:11434
+COMPLETION_API_KEY=
+COMPLETION_TEMPERATURE=0.1
+
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_API_KEY=
+
+VISION_PROVIDER=ollama
+VISION_MODEL=llava:7b
+VISION_BASE_URL=http://localhost:11434
+VISION_API_KEY=
+VISION_TEMPERATURE=0.1
+```
+
+### 3. 准备 Ollama 模型（本地模型时）
+
+确保已安装并运行 Ollama，并下载所需模型：
 
 ```bash
 # 拉取语言模型
@@ -29,42 +66,22 @@ ollama pull qwen3.5:2b
 # 拉取嵌入模型
 ollama pull nomic-embed-text
 
+# 拉取视觉模型（如果要启用图片理解）
+ollama pull llava:7b
+
 # 启动 Ollama 服务（如果未运行）
 ollama serve
 ```
 
-### 3. 配置环境变量
+### 4. 初始化测试数据
 
 ```bash
-# 复制示例配置
-cp .env.example .env
-
-# 编辑 .env 文件（通常无需修改默认值）
-MODEL_NAME=qwen3.5:2b
-EMBEDDING_MODEL_NAME=nomic-embed-text
-MODEL_TEMPERATURE=0.1
-```
-
-## 🚀 启动系统
-
-### 方式一：快速启动（推荐）
-
-```bash
-python start.py
-```
-
-这将自动完成：
-- 检查 Ollama 服务
-- 初始化数据库（首次运行）
-- 启动 Web 服务器
-
-### 方式二：分步启动
-
-```bash
-# 1. 初始化数据库和测试数据（首次运行）
 python src/test/init_test_data.py
+```
 
-# 2. 启动服务
+### 5. 启动系统
+
+```bash
 python src/main.py
 ```
 
@@ -74,160 +91,88 @@ python src/main.py
 
 - **Web 界面**: http://localhost:8000
 - **API 文档**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 - **健康检查**: http://localhost:8000/health
 
 ## 🎯 基本使用
 
 ### 使用 Web 界面查题
 
-1. **输入 Token**
-   - 默认测试 Token: `test123456`
-   
-2. **输入题目**
-   - 在"题目内容"框中输入要查询的题目
-   
-3. **选择题型（可选）**
-   - 单选题、多选题、判断题等
-   
-4. **填写选项（可选）**
-   - 如果是选择题，可填写选项帮助 AI 判断
-   
-5. **点击"搜索答案"**
-   - 等待片刻，查看结果
+1. 输入 Token（如测试 Token: `test123456`）
+2. 输入题目内容
+3. 选择题型（可选）
+4. 填写选项（可选）
+5. 点击“搜索答案”
 
-### 全屏查看结果
+### 选择题选项中的图片 URL
 
-- 点击结果下方的"全屏查看"按钮
-- 结果将以 90% 屏幕空间展示
-- 按 ESC 或点击右上角 × 关闭
-
-### 复制结果
-
-- 点击"复制结果"按钮
-- 结果将复制到剪贴板
+如果选择题选项里包含图片 URL：
+- 系统会自动提取并归一化图片链接
+- 视觉能力启用时会对选项图片做基础理解
+- 对图片型选项，Query Agent 还能按需调用图片分析工具进一步查看
+- 如果视觉能力不可用或图片解析失败，请求不会中断，而会降级为“文本 + 原始 URL”继续答题
 
 ## 🧪 测试系统
 
-运行测试脚本验证功能：
+### 运行完整测试
 
 ```bash
-python src/test_api.py
+uv run pytest tests -v
 ```
 
-这将测试：
-- ✓ 健康检查端点
-- ✓ 根路径访问
-- ✓ 简单查题
-- ✓ 带选项查题
-- ✓ 配额查询
-- ✓ 无效 Token 处理
+### 运行常用聚焦测试
 
-## 📝 使用示例
-
-### 示例 1：查询政治理论题目
-
-**输入：**
-```
-Token: test123456
-题目：中国梦的本质是什么？
-题型：未知题型
+```bash
+uv run pytest tests/utils/test_llm.py -v
+uv run pytest tests/routers/test_api_v1.py -v
+uv run pytest tests/services/test_ai_service.py -v
 ```
 
-**输出：**
-```json
-{
-  "code": 1,
-  "message": "请求成功",
-  "data": {
-    "question": "中国梦的本质是什么？",
-    "answer": "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。",
-    "times": 999,
-    "ai": false
-  }
-}
+## 📝 示例
+
+### 示例 1：普通查题
+
+```bash
+curl "http://localhost:8000/api/v1/query?token=test123456&title=中国梦的本质是什么？"
 ```
 
-### 示例 2：查询带选项的单选题
+### 示例 2：带图片型选项的查题
 
-**输入：**
-```
-Token: test123456
-题目：马克思主义活的灵魂是？
-题型：单选题
-选项：
-A. 实事求是
-B. 具体问题具体分析
-C. 理论联系实际
-D. 群众路线
+```bash
+curl "http://localhost:8000/api/v1/query?token=test123456&title=以下采用的是直接类比法的是（+）&options=A.%20https://img.test/a.png%0AB.%20普通选项&type=single"
 ```
 
-**输出：**
-```json
-{
-  "code": 1,
-  "message": "请求成功",
-  "data": {
-    "question": "马克思主义活的灵魂是？",
-    "answer": "B",
-    "times": 998,
-    "ai": true
-  }
-}
-```
+### 示例 3：SSE 流式查题
 
-### 示例 3：查询配额信息
-
-**输入：**
-```
-Token: test123456
-```
-
-**输出：**
-```json
-{
-  "code": 1,
-  "message": "请求成功",
-  "data": {
-    "times": 998,
-    "user_times": 2,
-    "success_times": 2
-  }
-}
+```bash
+curl -N "http://localhost:8000/api/v1/query?token=test123456&title=中国梦的本质是什么？&stream=true"
 ```
 
 ## 🔧 常见问题
 
-### Q1: 提示"无法连接到服务器"
+### Q1: Ollama 连接失败
 
 **解决方案：**
-1. 确认服务已启动（`python src/main.py`）
-2. 检查端口 8000 是否被占用
-3. 尝试访问 http://localhost:8000/health
 
-### Q2: 提示"无效的 token"
+```bash
+ollama list
+ollama serve
+```
+
+### Q2: 图片选项没有被理解
+
+**检查项：**
+1. `VISION_PROVIDER` 是否已配置
+2. `VISION_MODEL` 是否为支持视觉的模型
+3. 图片 URL 是否可访问
+4. 如果使用 Ollama，确认视觉模型已下载
+
+### Q3: 提示“无效的 token”
 
 **解决方案：**
 1. 确认 Token 拼写正确
 2. 使用测试 Token：`test123456`
 3. 运行 `python src/test/init_test_data.py` 重新初始化测试数据
-
-### Q3: AI 生成答案不准确
-
-**解决方案：**
-1. 提供更详细的选项信息
-2. 指定正确的题型
-3. 考虑人工录入准确答案到题库
-
-### Q4: Ollama 连接失败
-
-**解决方案：**
-```bash
-# 检查 Ollama 是否运行
-ollama list
-
-# 重启 Ollama 服务
-ollama serve
-```
 
 ## 📊 预置数据
 
@@ -248,79 +193,3 @@ ollama serve
 
 ### 示例题目
 - 8 道精选题目，涵盖各分类
-
-## 🧪 测试与初始化
-
-### 初始化测试数据
-
-首次使用或需要重置测试数据时运行：
-
-```bash
-python src/test/init_test_data.py
-```
-
-这将创建：
-- 3 个测试 Token
-- 6 个题目分类
-- 8 道示例题目
-- 向量化索引
-
-### 运行测试脚本
-
-```bash
-# 测试 API 功能
-python src/test/test_api.py
-
-# 测试数据库模型
-python src/test/test_sqlmodel.py
-```
-
-### 添加新题目
-
-```python
-from src.db import db
-from src.agents.rag_chat import rag_chat
-
-# 添加到数据库
-q_id = db.add_question(
-    question_text="你的题目",
-    answer_text="正确答案",
-    source="自定义题库"
-)
-
-# 添加到向量库
-rag_chat.add_document(
-    question="你的题目",
-    answer="正确答案",
-    metadata={"id": q_id}
-)
-```
-
-### 使用 API 编程调用
-
-```python
-import requests
-
-response = requests.get(
-    "http://localhost:8000/api/query",
-    params={
-        "token": "test123456",
-        "question": "中国梦的本质是什么？"
-    }
-)
-
-result = response.json()
-print(result['data']['answer'])
-```
-
-## 📞 获取帮助
-
-如遇到其他问题：
-
-1. 查看日志输出
-2. 访问 API 文档：http://localhost:8000/docs
-3. 提交 Issue 反馈
-
----
-
-**祝您使用愉快！** 🎉
