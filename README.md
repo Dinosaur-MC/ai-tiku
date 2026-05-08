@@ -73,39 +73,39 @@ AI 题库答题服务系统 - 基于 AI 的智能题库查询和答题解决方�
 ### 模块说明
 
 1. **Web UI 层** (`ui.py`)
-   - 基于 MDUI 组件库的现代化界面
-   - 支持全屏查看、结果复制
-   - 响应式设计，适配各种屏幕
+    - 基于 MDUI 组件库的现代化界面
+    - 支持全屏查看、结果复制
+    - 响应式设计，适配各种屏幕
 
 2. **API 层** (`api.py`)
-   - `/query` - 查题接口
-   - `/info` - 配额查询接口
-   - Token 验证和配额管理
+    - `/query` - 查题接口
+    - `/info` - 配额查询接口
+    - Token 验证和配额管理
 
 3. **Answer Retriever** (`answer_retriever.py`)
-   - 向量相似度搜索
-   - AI 答案生成
-   - 结果排序和过滤
+    - 向量相似度搜索
+    - AI 答案生成
+    - 结果排序和过滤
 
 4. **Agents 层** (`agents/`)
-   - `classification.py` - 题目分类 Agent
-   - `reviewer.py` - 答案复审 Agent
-   - `rag_chat.py` - RAG 对话 Agent
+    - `classification.py` - 题目分类 Agent
+    - `reviewer.py` - 答案复审 Agent
+    - `rag_chat.py` - RAG 对话 Agent
 
 5. **Database 层** (`db.py`)
-   - SQLite 关系型数据库
-   - FAISS 向量数据库
-   - 数据持久化管理
+    - SQLite 关系型数据库
+    - FAISS 向量数据库
+    - 数据持久化管理
 
 6. **LLM 层** (`src/utils/llm.py`)
-   - 统一的模型调用接口
-   - 支持流式和异步操作
-   - 多模型后端适配
+    - 统一的模型调用接口
+    - 支持流式和异步操作
+    - 多模型后端适配
 
 7. **Prompts 层** (`prompts/`)
-   - 分类提示词模板
-   - 查询提示词模板
-   - 复审提示词模板
+    - 分类提示词模板
+    - 查询提示词模板
+    - 复审提示词模板
 
 ## 🚀 快速开始
 
@@ -135,6 +135,7 @@ cp .env.example .env
 本项目支持 `ollama` 与通用 `openai_compatible` provider，模型路由与初始化逻辑集中在 `src/utils/llm.py`。
 
 支持的 provider：
+
 - `ollama`
 - `openai_compatible`
 
@@ -170,6 +171,7 @@ VISION_TEMPERATURE=0.1
 ```
 
 视觉能力说明：
+
 - `VISION_PROVIDER=openai_compatible` 时需要显式配置 `VISION_MODEL`、`VISION_BASE_URL`、`VISION_API_KEY`
 - `VISION_PROVIDER=ollama` 时需要 `VISION_MODEL`，`VISION_API_KEY` 可留空
 - 上层统一通过 `analyze_images(prompt, image_urls)` 调用视觉能力，因此业务层不需要区分 provider
@@ -202,6 +204,7 @@ python src/init_db.py
 ```
 
 这将创建：
+
 - 测试 Token（test123456, demo789012, user345678）
 - 题目分类（政治理论、历史文化、科学技术等）
 - 示例题目（8 道精选题目）
@@ -232,15 +235,15 @@ python src/main.py
 
 #### 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| token | string | 是 | 用户凭证 |
-| question | string | 是 | 题目内容（与 title、q 三选一） |
-| title | string | 否 | 题目内容（优先级最高） |
-| q | string | 否 | 题目内容 |
-| options | string | 否 | 选项内容，多个用换行分隔 |
-| type | string | 否 | 题目类型（single/multiple/judgement/completion/unknown） |
-| stream | boolean | 否 | 设为 `true` 时启用 SSE 心跳流式响应 |
+| 参数     | 类型    | 必填 | 说明                                                     |
+| -------- | ------- | ---- | -------------------------------------------------------- |
+| token    | string  | 是   | 用户凭证                                                 |
+| question | string  | 是   | 题目内容（与 title、q 三选一）                           |
+| title    | string  | 否   | 题目内容（优先级最高）                                   |
+| q        | string  | 否   | 题目内容                                                 |
+| options  | string  | 否   | 选项内容，多个用换行分隔                                 |
+| type     | string  | 否   | 题目类型（single/multiple/judgement/completion/unknown） |
+| stream   | boolean | 否   | 设为 `true` 时启用 SSE 心跳流式响应                      |
 
 #### 响应说明
 
@@ -252,6 +255,7 @@ python src/main.py
 #### 选项图片说明
 
 当 `options` 中包含图片 URL 时：
+
 - 系统会先提取并归一化图片链接（包括去重、清理拼接/包裹噪音）
 - 如果已启用 `VISION_PROVIDER`，会对图片做基础理解并把结果注入选项文本
 - 对于图片型选项，查询 Agent 还能按需调用图片分析工具做二次查看
@@ -277,15 +281,29 @@ data: {"code": 1, "message": "请求成功", "data": {"question": "中国梦的�
 
 ```json
 {
-  "code": 1,
-  "message": "请求成功",
-  "data": {
-    "question": "中国梦的本质是什么？",
-    "answer": "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。",
-    "times": 999,
-    "ai": false
-  }
+    "code": 1,
+    "message": "请求成功",
+    "data": {
+        "question": "中国梦的本质是什么？",
+        "answer": "实现中华民族伟大复兴，本质是国家富强、民族振兴、人民幸福。",
+        "times": 999,
+        "ai": false
+    }
 }
+```
+
+#### OCS handler 示例
+
+非流式：
+
+```plaintext
+return (res)=>data.code===0?undefined:[data.data.question, data.data.answer]
+```
+
+SSE：
+
+```plaintext
+return (res)=>{const streams=res.trim().split('\\n\\n').map((line)=>{const[e,d]=line.split('\\n');return[e?.replace(/^event: /,''),JSON.parse(d?.replace(/^data: /,'')||'{}')];});for (const[event,data]of streams){if(event==='heartbeat'){console.log('[OCS] heartbeat');}else if(event==='result'){if(data.code===0){return undefined;}return[data.data.question, data.data.answer];}}}
 ```
 
 ### 配额查询接口
@@ -296,22 +314,23 @@ data: {"code": 1, "message": "请求成功", "data": {"question": "中国梦的�
 
 #### 请求参数
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| token | string | 是 | 用户凭证 |
+| 参数  | 类型   | 必填 | 说明     |
+| ----- | ------ | ---- | -------- |
+| token | string | 是   | 用户凭证 |
 
 #### 响应示例
 
 ``json
 {
-  "code": 1,
-  "message": "请求成功",
-  "data": {
-    "times": 1000,
-    "user_times": 5000,
-    "success_times": 4800
-  }
+"code": 1,
+"message": "请求成功",
+"data": {
+"times": 1000,
+"user_times": 5000,
+"success_times": 4800
 }
+}
+
 ```
 
 ## 🎨 Web 界面
@@ -347,32 +366,34 @@ data: {"code": 1, "message": "请求成功", "data": {"question": "中国梦的�
 ### 项目结构
 
 ```
+
 ai-tiku/
 ├── src/
-│   ├── agents/          # Agent 层
-│   │   ├── classification.py
-│   │   ├── reviewer.py
-│   │   └── rag_chat.py
-│   ├── prompts/         # 提示词模板
-│   │   ├── classify.py
-│   │   ├── query.py
-│   │   └── review.py
-│   ├── answer_retriever.py
-│   ├── api.py
-│   ├── db.py
-│   ├── utils/             # DB / VectorStore / LLM / JWT 工具
-│   │   └── llm.py         # Provider 路由与模型初始化
-│   ├── main.py
-│   ├── ui.py
-│   └── init_db.py
-├── data/                # 数据目录（自动生成）
-│   ├── db.sqlite3
-│   └── embeddings/
-├── .env                 # 环境变量配置
-├── .env.example         # 配置示例
-├── pyproject.toml       # 项目配置
-└── README.md            # 项目文档
-```
+│ ├── agents/ # Agent 层
+│ │ ├── classification.py
+│ │ ├── reviewer.py
+│ │ └── rag_chat.py
+│ ├── prompts/ # 提示词模板
+│ │ ├── classify.py
+│ │ ├── query.py
+│ │ └── review.py
+│ ├── answer_retriever.py
+│ ├── api.py
+│ ├── db.py
+│ ├── utils/ # DB / VectorStore / LLM / JWT 工具
+│ │ └── llm.py # Provider 路由与模型初始化
+│ ├── main.py
+│ ├── ui.py
+│ └── init_db.py
+├── data/ # 数据目录（自动生成）
+│ ├── db.sqlite3
+│ └── embeddings/
+├── .env # 环境变量配置
+├── .env.example # 配置示例
+├── pyproject.toml # 项目配置
+└── README.md # 项目文档
+
+````
 
 ### 添加新题目
 
@@ -394,7 +415,7 @@ rag_chat.add_document(
     answer="正确答案",
     metadata={"question_id": question_id}
 )
-```
+````
 
 ### 使用分类 Agent
 
@@ -443,25 +464,25 @@ print(response['sources'])  # 引用来源
 
 ### 环境变量
 
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| MODEL_TEMPERATURE | 0.1 | 全局默认温度 |
-| CHAT_PROVIDER | ollama | Chat provider，可选 `ollama` / `openai_compatible` |
-| CHAT_MODEL | qwen3.5:2b | Chat 模型名称 |
-| CHAT_BASE_URL | http://localhost:11434 | Chat provider 接口地址 |
-| CHAT_API_KEY | 空 | Chat provider API Key |
-| CHAT_TEMPERATURE | 0.1 | Chat 温度，未设置时可回退到全局温度 |
-| COMPLETION_PROVIDER | ollama | Completion provider，可选 `ollama` / `openai_compatible` |
-| COMPLETION_MODEL | qwen3.5:2b | Completion 模型名称 |
-| COMPLETION_BASE_URL | http://localhost:11434 | Completion provider 接口地址 |
-| COMPLETION_API_KEY | 空 | Completion provider API Key |
-| COMPLETION_TEMPERATURE | 0.1 | Completion 温度，未设置时可回退到全局温度 |
-| EMBEDDING_PROVIDER | ollama | Embedding provider，可选 `ollama` / `openai_compatible` |
-| EMBEDDING_MODEL | nomic-embed-text | Embedding 模型名称 |
-| EMBEDDING_BASE_URL | http://localhost:11434 | Embedding provider 接口地址 |
-| EMBEDDING_API_KEY | 空 | Embedding provider API Key |
-| DATABASE_PATH | data/db.sqlite3 | SQLite 数据库路径 |
-| EMBEDDINGS_DIR | data/embeddings | 向量库目录 |
+| 变量名                 | 默认值                 | 说明                                                     |
+| ---------------------- | ---------------------- | -------------------------------------------------------- |
+| MODEL_TEMPERATURE      | 0.1                    | 全局默认温度                                             |
+| CHAT_PROVIDER          | ollama                 | Chat provider，可选 `ollama` / `openai_compatible`       |
+| CHAT_MODEL             | qwen3.5:2b             | Chat 模型名称                                            |
+| CHAT_BASE_URL          | http://localhost:11434 | Chat provider 接口地址                                   |
+| CHAT_API_KEY           | 空                     | Chat provider API Key                                    |
+| CHAT_TEMPERATURE       | 0.1                    | Chat 温度，未设置时可回退到全局温度                      |
+| COMPLETION_PROVIDER    | ollama                 | Completion provider，可选 `ollama` / `openai_compatible` |
+| COMPLETION_MODEL       | qwen3.5:2b             | Completion 模型名称                                      |
+| COMPLETION_BASE_URL    | http://localhost:11434 | Completion provider 接口地址                             |
+| COMPLETION_API_KEY     | 空                     | Completion provider API Key                              |
+| COMPLETION_TEMPERATURE | 0.1                    | Completion 温度，未设置时可回退到全局温度                |
+| EMBEDDING_PROVIDER     | ollama                 | Embedding provider，可选 `ollama` / `openai_compatible`  |
+| EMBEDDING_MODEL        | nomic-embed-text       | Embedding 模型名称                                       |
+| EMBEDDING_BASE_URL     | http://localhost:11434 | Embedding provider 接口地址                              |
+| EMBEDDING_API_KEY      | 空                     | Embedding provider API Key                               |
+| DATABASE_PATH          | data/db.sqlite3        | SQLite 数据库路径                                        |
+| EMBEDDINGS_DIR         | data/embeddings        | 向量库目录                                               |
 
 ### Provider 配置
 
@@ -530,31 +551,31 @@ EMBEDDING_API_KEY=your-openai-compatible-key
 
 ### api_tokens - 用户凭证表
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER | 主键 ID |
-| token | TEXT | 用户唯一凭证 |
-| total_queries | INTEGER | 总查询次数 |
-| success_queries | INTEGER | 成功查询次数 |
+| 字段              | 类型    | 说明         |
+| ----------------- | ------- | ------------ |
+| id                | INTEGER | 主键 ID      |
+| token             | TEXT    | 用户唯一凭证 |
+| total_queries     | INTEGER | 总查询次数   |
+| success_queries   | INTEGER | 成功查询次数 |
 | remaining_queries | INTEGER | 剩余查询次数 |
 
 ### questions - 题目表
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER | 题目 ID |
-| question_text | TEXT | 题目内容 |
-| answer_text | TEXT | 答案内容 |
+| 字段            | 类型    | 说明         |
+| --------------- | ------- | ------------ |
+| id              | INTEGER | 题目 ID      |
+| question_text   | TEXT    | 题目内容     |
+| answer_text     | TEXT    | 答案内容     |
 | is_ai_generated | INTEGER | 是否 AI 生成 |
-| source | TEXT | 题目来源 |
+| source          | TEXT    | 题目来源     |
 
 ### categories - 分类表
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| id | INTEGER | 分类 ID |
-| name | TEXT | 分类名称 |
-| description | TEXT | 分类描述 |
+| 字段        | 类型    | 说明     |
+| ----------- | ------- | -------- |
+| id          | INTEGER | 分类 ID  |
+| name        | TEXT    | 分类名称 |
+| description | TEXT    | 分类描述 |
 
 ## 🔒 安全建议
 
