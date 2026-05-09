@@ -106,7 +106,7 @@ async def root_head():
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     """图标"""
-    favicon_path = Path(__file__).parent / "favicon.ico"
+    favicon_path = Path(__file__).parent.parent / "favicon.ico"
     if favicon_path.exists():
         return FileResponse(favicon_path)
     else:
