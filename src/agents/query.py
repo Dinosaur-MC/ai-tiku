@@ -42,11 +42,11 @@ class QueryAgent:
         回答题目
 
         Args:
-            title: 题目内容
+            title: 题目内容（可能已包含图片摘要）
             options: 选项列表
             question_type: 题目类型
             subject: 科目/课程名称
-            option_image_refs: 选项对应的图片资源引用
+            option_image_refs: 图片和选项的映射关系，包含 __title__ 键表示题干图片
             image_tool: 图片分析工具
 
         Returns:
@@ -56,6 +56,12 @@ class QueryAgent:
         logger.info(
             f"收到查询请求：subject='{subject}', question='{title[:50]}...', type={question_type}"
         )
+        
+        # 提取题干图片引用（如果存在）
+        title_image_refs = None
+        if option_image_refs and "__title__" in option_image_refs:
+            title_image_refs = option_image_refs.pop("__title__", None)
+        
         formatted_options = self._format_options(options)
 
         try:
@@ -93,8 +99,13 @@ class QueryAgent:
             query_prompt = build_query_prompt(
                 question_type, title, formatted_options, subject
             )
-            if self._should_use_image_tool(image_tool, option_image_refs):
-                tool_prompt = self._build_tool_prompt(query_prompt, option_image_refs)
+            
+            # 检查是否需要使用图片工具（题干或选项有图片）
+            has_title_images = title_image_refs and len(title_image_refs) > 0
+            has_option_images = option_image_refs and any(image_refs for image_refs in option_image_refs.values())
+            
+            if image_tool and (has_title_images or has_option_images):
+                tool_prompt = self._build_tool_prompt(query_prompt, option_image_refs, title_image_refs)
                 answer = self._invoke_tool_agent(tool_prompt, image_tool).strip()
             else:
                 answer = completion.invoke(query_prompt).strip()
@@ -179,20 +190,32 @@ class QueryAgent:
 
     @staticmethod
     def _build_tool_prompt(
-        prompt: str, option_image_refs: Optional[Dict[str, List[str]]]
+        prompt: str, 
+        option_image_refs: Optional[Dict[str, List[str]]],
+        title_image_refs: Optional[List[str]] = None
     ) -> str:
-        """为工具调用补充紧凑的选项图片资源上下文。"""
-        if not option_image_refs:
-            return prompt
+        """为工具调用补充紧凑的图片资源上下文（包括题干和选项）。"""
+        resource_lines = []
+        
+        # 添加题干图片资源
+        if title_image_refs:
+            resource_lines.append("Title image resources:")
+            resource_lines.append(f"- {', '.join(title_image_refs)}")
+            resource_lines.append("")
+        
+        # 添加选项图片资源
+        if option_image_refs:
+            has_option_images = any(image_refs for image_refs in option_image_refs.values())
+            if has_option_images:
+                resource_lines.append("Option image resources:")
+                for option, image_refs in option_image_refs.items():
+                    if not image_refs:
+                        continue
+                    resource_lines.append(f"- {option}: {', '.join(image_refs)}")
 
-        resource_lines = ["Option image resources:"]
-        for option, image_refs in option_image_refs.items():
-            if not image_refs:
-                continue
-            resource_lines.append(f"- {option}: {', '.join(image_refs)}")
-
-        if len(resource_lines) == 1:
+        if not resource_lines:
             return prompt
+        
         return f"{prompt}\n\n" + "\n".join(resource_lines)
 
     @staticmethod

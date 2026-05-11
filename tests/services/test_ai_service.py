@@ -25,6 +25,15 @@ def _load_ai_service_module(monkeypatch):
     fake_option_images.build_enhanced_option_text = (
         lambda payload: payload.normalized_text
     )
+    fake_option_images.normalize_title = lambda title, summarizer=None: _payload(
+        title,
+        title,
+        [],
+        None,
+    )
+    fake_option_images.build_enhanced_title_text = (
+        lambda payload: payload.normalized_text
+    )
     monkeypatch.setitem(sys.modules, "utils.option_images", fake_option_images)
 
     import utils.llm as llm

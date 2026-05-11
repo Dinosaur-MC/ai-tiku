@@ -15,7 +15,12 @@ from agents.classification import classifier
 from agents.query import query_agent
 from agents.rag_chat import rag_chat
 from agents.reviewer import reviewer
-from utils.option_images import build_enhanced_option_text, preprocess_options
+from utils.option_images import (
+    build_enhanced_option_text,
+    build_enhanced_title_text,
+    preprocess_options,
+    normalize_title,
+)
 from utils.llm import analyze_images, vision_enabled
 
 logger = logging.getLogger(__name__)
@@ -56,6 +61,23 @@ class AIService:
         summary_text = str(summary).strip()
         return summary_text or None
 
+    def _summarize_title_image(self, image_urls: List[str]) -> Optional[str]:
+        """为题干图片生成摘要"""
+        if not image_urls or not vision_enabled():
+            return None
+
+        try:
+            summary = analyze_images(
+                "请简要概括该题目标题图片中的关键信息，仅输出对答题有帮助的中文结果。",
+                image_urls,
+            )
+        except Exception as exc:
+            logger.warning("Title image summarization failed: %s", exc)
+            return None
+
+        summary_text = str(summary).strip()
+        return summary_text or None
+
     def _build_analyze_option_image_tool(
         self, option_image_refs: Optional[Dict[str, List[str]]]
     ):
@@ -87,6 +109,51 @@ class AIService:
             return analysis_text or "未能从该选项图片中提取到有效信息。"
 
         return analyze_option_image
+
+    def _prepare_query_title(self, title: str):
+        """预处理题目标题，提取图片并生成摘要"""
+        if not title:
+            return title, None, None
+
+        summarizer = self._summarize_title_image if vision_enabled() else None
+        title_payload = normalize_title(title, summarizer=summarizer)
+
+        enhanced_title = build_enhanced_title_text(title_payload)
+        title_image_refs = title_payload.image_urls if title_payload.image_urls else None
+
+        image_tool = self._build_analyze_title_image_tool(title_image_refs)
+        return enhanced_title, title_image_refs, image_tool
+
+    def _build_analyze_title_image_tool(
+        self, title_image_refs: Optional[List[str]]
+    ):
+        """构建题干图片分析工具"""
+        if not title_image_refs or not vision_enabled():
+            return None
+
+        allowed_urls = set(title_image_refs)
+        if not allowed_urls:
+            return None
+
+        @tool
+        def analyze_title_image(image_url: str) -> str:
+            """分析当前题目标题中的单张图片并返回简洁说明。"""
+            if image_url not in allowed_urls:
+                return "该图片不属于当前题目标题，无法分析。"
+
+            try:
+                analysis = analyze_images(
+                    "请简要概括这张题目标题图片中的关键信息，仅输出对答题有帮助的中文结果。",
+                    [image_url],
+                )
+            except Exception as exc:
+                logger.warning("Title image tool failed: %s", exc)
+                return f"无法分析该题目标题图片：{exc}"
+
+            analysis_text = str(analysis).strip()
+            return analysis_text or "未能从该题目标题图片中提取到有效信息。"
+
+        return analyze_title_image
 
     def _prepare_query_options(self, options: List[str]):
         if not options:
@@ -210,7 +277,7 @@ class AIService:
         使用 LLM 生成答案（原 AIResponder.generate_answer）
 
         Args:
-            title: 题目内容
+            title: 题目内容（可能包含图片 URL）
             options: 选项列表
             question_type: 题目类型
             subject: 科目/课程名称
@@ -225,17 +292,36 @@ class AIService:
         if question_type in ["judgement", "completion", "essay"]:
             options = None
 
+        # 处理题目标题中的图片
+        title_image_refs = None
+        title_image_tool = None
+        if title:
+            title, title_image_refs, title_image_tool = self._prepare_query_title(title)
+
+        # 处理选项中的图片
         option_image_refs = None
-        image_tool = None
+        option_image_tool = None
         if options:
-            options, option_image_refs, image_tool = self._prepare_query_options(options)
+            options, option_image_refs, option_image_tool = self._prepare_query_options(options)
+
+        # 合并图片工具（如果两者都有图片）
+        image_tool = title_image_tool or option_image_tool
+
+        # 合并图片引用
+        combined_image_refs = None
+        if title_image_refs or option_image_refs:
+            combined_image_refs = {}
+            if title_image_refs:
+                combined_image_refs["__title__"] = title_image_refs
+            if option_image_refs:
+                combined_image_refs.update(option_image_refs)
 
         return self.query_agent.answer(
             title=title,
             options=options,
             question_type=question_type,
             subject=subject,
-            option_image_refs=option_image_refs,
+            option_image_refs=combined_image_refs,
             image_tool=image_tool,
         )
 
